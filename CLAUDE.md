@@ -79,3 +79,17 @@ patterns, no glassmorphism, no card-everything, no border-left accent stripes).
 Default branch is **`master`**, not `main`. Issues live on the `Wonder-Cabinet-Productions` GitHub
 org. A fuller, integrated version of this tool lives in `podcast-publishing-suite`; this is the
 public build and deliberately omits its pipeline integrations.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in this repo's GitHub Issues (`Wonder-Cabinet-Productions/wc-art-builder`), managed with the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: one `CONTEXT.md` and `docs/adr/` at the repo root, created as terms and decisions get settled. See `docs/agents/domain.md`.
