@@ -14,9 +14,45 @@ The one server-side piece is a small Cloudflare Pages Function that proxies Unsp
 
 Note that nothing persists: the source pool, the three panels, and Saved Combinations all live in memory, so reloading the page discards them. Export before you refresh.
 
-## What this isn't
+## Relationship to `podcast-publishing-suite`
 
-A separate, fuller version of this tool lives inside the [`podcast-publishing-suite`](https://github.com/Wonder-Cabinet-Productions/podcast-publishing-suite) repo as part of the agentic episode-publishing pipeline. That version has additional integrations (direct save to canonical episode folders, auto-populated source images from the episode's source-image folder). This public build intentionally omits those integrations — they require a local Python server and access to the episode pipeline.
+This repo is one of **two diverged copies** of the episode-art builder. The other lives at
+[`tools/episode-art-builder/`](https://github.com/Wonder-Cabinet-Productions/podcast-publishing-suite/tree/master/tools/episode-art-builder)
+in `podcast-publishing-suite`, as part of the agentic episode-publishing pipeline.
+
+| | This repo (`wc-art-builder`) | Suite copy (`tools/episode-art-builder/`) |
+|---|---|---|
+| Audience | Producers, via the hosted site | The publishing pipeline, run locally |
+| Backend | Cloudflare Pages Function (Unsplash proxy) | Local Python server (`serve.py`) |
+| Extras | — | Saves straight to canonical episode folders; preloads source images from the episode's folder (`public/episode-preload/`) |
+| Shared code | `public/index.html` | `public/index.html` — **forked, not synced** |
+
+The two `index.html` files started from the same source. As of November 2026 the drift is small:
+the compositor core is identical, and `functions/api/unsplash.js` matches byte for byte. The suite
+copy adds about 140 lines on top: the save-to-episode-folder button and its `/save/*` calls, `/config`
+detection, and `?episode=` preload. This repo has a newer header and intro text. Both of the
+suite's additions switch themselves off when their server endpoints are missing. Nothing keeps
+the two copies in sync, so a fix made in one does not reach the other.
+
+**Planned refactor.** This repo was renamed from `episode-art-builder` to `wc-art-builder` ahead
+of further feature work, and is intended to become the canonical home of the compositor. A future
+refactor should make this repo the single source for the UI while keeping the pipeline features
+**out of the hosted build**. Save-to-episode-folder won't work cleanly until other parts of the
+pipeline are refactored, so it must not ship here yet, even hidden.
+
+The plan is a pipeline-only add-on script:
+
+- **This repo:** one `index.html` with no code for the episode folder. This is what deploys.
+- **The suite:** a separate `pipeline.js` with the save-to-folder button (the script adds the
+  button itself), the `/config` check, and the `?episode=` preload. `serve.py` serves this repo's
+  `index.html` and adds a `<script src="pipeline.js">` tag as it sends the page.
+
+`pipeline.js` can call the page's global functions (`handleFiles`, `drawCover`,
+`generateCreditsMarkdown`, `slotData`), so this is mostly moving code, not rewriting it. Rename or
+re-scope any of those and the add-on breaks, so treat them as a public interface. Whether any
+pipeline feature reaches the hosted site is a separate decision for after the pipeline refactor.
+
+Until then, port any compositor change you want in both places by hand.
 
 ## Running locally
 
@@ -46,7 +82,8 @@ npx wrangler pages dev public
 ## Deploying
 
 Live at **https://art.wondercabinetproductions.com** — Cloudflare Pages project
-`episode-art-builder`.
+`episode-art-builder`. (The Pages project kept its original name when the GitHub repo was renamed
+to `wc-art-builder`; the commands below use the Pages name.)
 
 **Deploys are manual. Pushing to `master` does not deploy anything.** The Pages project is
 configured for *direct upload*, with no Git integration, so the repo and production drift apart
