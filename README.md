@@ -14,9 +14,33 @@ The one server-side piece is a small Cloudflare Pages Function that proxies Unsp
 
 Note that nothing persists: the source pool, the three panels, and Saved Combinations all live in memory, so reloading the page discards them. Export before you refresh.
 
-## What this isn't
+## Relationship to `podcast-publishing-suite`
 
-A separate, fuller version of this tool lives inside the [`podcast-publishing-suite`](https://github.com/Wonder-Cabinet-Productions/podcast-publishing-suite) repo as part of the agentic episode-publishing pipeline. That version has additional integrations (direct save to canonical episode folders, auto-populated source images from the episode's source-image folder). This public build intentionally omits those integrations — they require a local Python server and access to the episode pipeline.
+This repo is one of **two diverged copies** of the episode-art builder. The other lives at
+[`tools/episode-art-builder/`](https://github.com/Wonder-Cabinet-Productions/podcast-publishing-suite/tree/master/tools/episode-art-builder)
+in `podcast-publishing-suite`, as part of the agentic episode-publishing pipeline.
+
+| | This repo (`wc-art-builder`) | Suite copy (`tools/episode-art-builder/`) |
+|---|---|---|
+| Audience | Producers, via the hosted site | The publishing pipeline, run locally |
+| Backend | Cloudflare Pages Function (Unsplash proxy) | Local Python server (`serve.py`) |
+| Extras | — | Saves straight to canonical episode folders; preloads source images from the episode's folder (`public/episode-preload/`) |
+| Shared code | `public/index.html` | `public/index.html` — **forked, not synced** |
+
+The two `index.html` files started from the same source. As of November 2026 the drift is small:
+the compositor core is identical, and `functions/api/unsplash.js` matches byte for byte. The suite
+copy adds about 140 lines on top: the save-to-episode-folder button and its `/save/*` calls, `/config`
+detection, and `?episode=` preload. This repo has a newer header and intro text. Both of the
+suite's additions switch themselves off when their server endpoints are missing. Nothing keeps
+the two copies in sync, so a fix made in one does not reach the other.
+
+**Planned refactor.** This repo was renamed from `episode-art-builder` to `wc-art-builder` ahead
+of further feature work, and is intended to become the canonical home of the compositor. A future
+refactor should untangle the two copies, likely by making this repo the single source for the UI
+and reducing the suite's copy to its pipeline integrations (`serve.py`, episode preload, save-to-
+folder) layered on top. Because those additions already check for their server before running,
+merging them into this `index.html` should be safe: on the hosted site they'd stay hidden. Until
+then, port any compositor change you want in both places by hand.
 
 ## Running locally
 
@@ -46,7 +70,8 @@ npx wrangler pages dev public
 ## Deploying
 
 Live at **https://art.wondercabinetproductions.com** — Cloudflare Pages project
-`episode-art-builder`.
+`episode-art-builder`. (The Pages project kept its original name when the GitHub repo was renamed
+to `wc-art-builder`; the commands below use the Pages name.)
 
 **Deploys are manual. Pushing to `master` does not deploy anything.** The Pages project is
 configured for *direct upload*, with no Git integration, so the repo and production drift apart
