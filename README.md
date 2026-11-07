@@ -36,11 +36,23 @@ the two copies in sync, so a fix made in one does not reach the other.
 
 **Planned refactor.** This repo was renamed from `episode-art-builder` to `wc-art-builder` ahead
 of further feature work, and is intended to become the canonical home of the compositor. A future
-refactor should untangle the two copies, likely by making this repo the single source for the UI
-and reducing the suite's copy to its pipeline integrations (`serve.py`, episode preload, save-to-
-folder) layered on top. Because those additions already check for their server before running,
-merging them into this `index.html` should be safe: on the hosted site they'd stay hidden. Until
-then, port any compositor change you want in both places by hand.
+refactor should make this repo the single source for the UI while keeping the pipeline features
+**out of the hosted build**. Save-to-episode-folder won't work cleanly until other parts of the
+pipeline are refactored, so it must not ship here yet, even hidden.
+
+The plan is a pipeline-only add-on script:
+
+- **This repo:** one `index.html` with no code for the episode folder. This is what deploys.
+- **The suite:** a separate `pipeline.js` with the save-to-folder button (the script adds the
+  button itself), the `/config` check, and the `?episode=` preload. `serve.py` serves this repo's
+  `index.html` and adds a `<script src="pipeline.js">` tag as it sends the page.
+
+`pipeline.js` can call the page's global functions (`handleFiles`, `drawCover`,
+`generateCreditsMarkdown`, `slotData`), so this is mostly moving code, not rewriting it. Rename or
+re-scope any of those and the add-on breaks, so treat them as a public interface. Whether any
+pipeline feature reaches the hosted site is a separate decision for after the pipeline refactor.
+
+Until then, port any compositor change you want in both places by hand.
 
 ## Running locally
 
