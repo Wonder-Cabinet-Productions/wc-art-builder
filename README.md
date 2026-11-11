@@ -218,7 +218,7 @@ Laid out on a 1080px-wide base and scaled to the output (×2.78 for the 3000px 1
 |---|---|---|---|---|
 | Night | `#0B0B0B` | Cream `#FFFAEB` | `#10A544` | Dark-ground |
 | Cabinet green | `#10A544` | Black | Black | Black cabinet + white wordmark |
-| Deep green | `#043013` | Cream | `#58C07C` | Dark-ground |
+| Deep green | `#043013` | Cream | `#10A544` | Dark-ground |
 | Cream | `#FFFAEB` | Black | `#087834` | Light-ground |
 
 ## License

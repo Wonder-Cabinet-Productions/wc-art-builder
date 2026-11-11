@@ -487,7 +487,7 @@ const CONTRAST = { text: 4.5, logo: 3.0, mark: 3.0 };
 const COLORWAYS = {
   night: { name: 'Night',         rgb: '11,11,11',    field: '#0B0B0B', ink: CREAM,     accent: '#10A544', logo: 'dark',    logoInk: '#FFFFFF' },
   green: { name: 'Cabinet green', rgb: '16,165,68',   field: '#10A544', ink: '#000000', accent: '#000000', logo: 'onGreen', logoInk: '#FFFFFF' },
-  deep:  { name: 'Deep green',    rgb: '4,48,19',     field: '#043013', ink: CREAM,     accent: '#58C07C', logo: 'dark',    logoInk: '#FFFFFF' },
+  deep:  { name: 'Deep green',    rgb: '4,48,19',     field: '#043013', ink: CREAM,     accent: '#10A544', logo: 'dark',    logoInk: '#FFFFFF' },
   cream: { name: 'Cream',         rgb: '255,250,235', field: CREAM,     ink: '#000000', accent: '#087834', logo: 'light',   logoInk: '#10A544' }
 };
 const QUOTE_LAYOUTS = { wash: 'Full wash', fade: 'Photo right' };
@@ -1750,11 +1750,11 @@ function drawQuoteBackdrop(ctx, W, H, card, L, tune) {
       ctx.translate(cx, cy);
       ctx.scale(1, (b.h + 60) / (b.w + 60));
       const r = (b.w + 60) / 2;
-      const veil = ctx.createRadialGradient(0, 0, r * 0.85, 0, 0, r * 1.45);
+      const veil = ctx.createRadialGradient(0, 0, r * 0.85, 0, 0, r * 2.1);
       veil.addColorStop(0, 'rgba(' + cw.rgb + ',' + tune.veil + ')');
       veil.addColorStop(1, 'rgba(' + cw.rgb + ',0)');
       ctx.fillStyle = veil;
-      ctx.fillRect(-r * 1.5, -r * 1.5, r * 3, r * 3);
+      ctx.fillRect(-r * 2.2, -r * 2.2, r * 4.4, r * 4.4);
       ctx.restore();
     }
   } else if (src.img) {
