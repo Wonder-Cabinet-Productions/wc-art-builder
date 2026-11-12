@@ -1980,7 +1980,9 @@ function assetName(a) {
 
 function defaultFilenameBase() { return 'wondercabinet-' + (slugify(val('guestName')) || 'guest'); }
 function filenameBase() {
-  return val('exportName').replace(/\.(jpe?g|png|zip|md)$/i, '') || defaultFilenameBase();
+  // Hand-typed names go through slugify too: a / or \ would make folders inside the zip, and
+  // characters like : or ? give odd or invalid download names.
+  return slugify(val('exportName').replace(/\.(jpe?g|png|zip|md)$/i, '')) || defaultFilenameBase();
 }
 function formatFilename(fmt, card) {
   const base = filenameBase();

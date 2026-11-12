@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A producer-facing browser tool that composes 3-panel Wonder Cabinet episode art and exports a
 3000×3000 JPG plus a `credits.md`. Deliberately dependency-free: **no package.json, no build step,
-no framework, no tests.** The whole app is `public/index.html` (~1,275 lines: inline `<style>`,
+no framework, no tests.** The whole app is `public/index.html` (~2,600 lines: inline `<style>`,
 markup, then one `<script>` of plain globals). The only server-side code is
 `functions/api/unsplash.js`, a Cloudflare Pages Function.
 
@@ -48,17 +48,17 @@ change.
 ## Gotchas that will bite you
 
 - **CORS taint breaks export.** Every image load path must set `img.crossOrigin = 'anonymous'`
-  before `src` (see `public/index.html:463`, `:469`). Omit it and `toBlob` silently returns null,
+  before `src`; route new loads through the `loadImage()` helper, which does this. Omit it and `toBlob` silently returns null,
   surfacing only as the vague "Export failed (CORS issue…)" message.
 - **Filename-regex order is load-bearing.** `parseCompositeFilename()` must run *before*
   `parseUnsplashFilename()` — the single-photo regex is greedy and will swallow composite
-  filenames, mis-crediting them silently. There's a comment marking this at `:506`.
+  filenames, mis-crediting them silently. There's a comment marking this in `handleFiles()`.
 - **Inline `onclick` handlers everywhere.** Functions are globals bound via HTML attributes.
   Converting the script to `type="module"` breaks every handler at once.
 - **No persistence.** Source pool, panels, and Saved Combinations are in-memory only; a reload
   discards them. Don't assume state survives navigation.
-- **Layout constants are duplicated.** The spec table in `README.md` mirrors the constants at
-  `public/index.html:302-309`. Change both together.
+- **Layout constants are duplicated.** The spec table in `README.md` mirrors the constants under
+  `LAYOUT CONSTANTS` at the top of the `<script>` in `public/index.html`. Change both together.
 - **`exifr` loads from a CDN**, unpinned and without SRI. Credit auto-detection degrades silently
   offline (guarded by a `typeof exifr === 'undefined'` check).
 
