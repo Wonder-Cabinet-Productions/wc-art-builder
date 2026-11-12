@@ -2,13 +2,13 @@
 
 A browser-based tool for producers to compose **Wonder Cabinet** podcast episode art.
 
-Three panels on a green-bordered canvas: a guest portrait on the right, two thematic images on the left. Drag-and-drop or Unsplash search to populate; drag within a panel to reposition; export the 3000×3000 composite + a `credits.md` file as downloads.
+Three panels on a green-bordered canvas: a guest portrait on the right, two thematic images on the left. Drag-and-drop or Unsplash search to populate; drag within a panel to reposition; export the 3000×3000 composite + a `credits.md` file as downloads. From the same images it also makes a Social Sharing Graphic, a 16:9 YouTube thumbnail, and quote cards at 1:1 and 4:5 (see [Output formats](#output-formats)).
 
 Original design by [Art + Sons](https://artandsons.com/).
 
 ## What this is
 
-This is the public, producer-facing build of the Wonder Cabinet episode-art compositor. All image composition happens in the browser — there's no backend holding your work and no upload destination. The two files you export (composite JPG + credits.md) are downloads to your local machine.
+This is the public, producer-facing build of the Wonder Cabinet episode-art compositor. All image composition happens in the browser — there's no backend holding your work and no upload destination. Everything you export (the JPGs and credits.md, singly or as one zip) is a download to your local machine.
 
 The one server-side piece is a small Cloudflare Pages Function that proxies Unsplash search so the API key stays off the client. The hosted deployment also sits behind Cloudflare Access, so it does require a sign-in — see [Access control](#access-control).
 
@@ -124,7 +124,34 @@ Attribution is contractual, not optional: the `utm_source`/`utm_medium` paramete
 links and the `action=track-download` ping are both Unsplash API Guidelines requirements. Removing
 them puts API access at risk.
 
+## Output formats
+
+Everything the episode can produce is listed in **Export Preview** at the bottom of the page, each with
+its own Export button. **Export all ready** downloads one zip containing every ready asset plus
+`credits.md` (JSZip 3.10.1 from cdnjs, pinned with SRI; if it fails to load, the files download one at a
+time instead).
+
+| Asset | Size | Filename |
+|---|---|---|
+| Episode tile | 3000×3000 | `<base>.jpg` |
+| Social Sharing Graphic | 3000×3000 | `<base>-social.jpg` |
+| 16:9 YouTube thumbnail | 1920×1080 | `<base>-youtube.jpg` |
+| Quote card, 1:1 | 3000×3000 | `<base>-quote-N-<wash\|fade>.jpg` |
+| Quote card, 4:5 | 1080×1350 | `<base>-quote-N-<wash\|fade>-4x5.jpg` |
+| Credits | — | `<base>-credits.md` |
+
+The filename base defaults to `wondercabinet-<guest-slug>` and follows the Guest field until you edit it
+by hand. `credits.md` gets a credit line for each quote card and a draft alt-text line for each asset.
+
+Text in the art uses Jost (standing in for Futura) and EB Garamond (for Adobe Garamond) from Google
+Fonts. Logo files live in `public/brand/` (see its README for their source).
+
 ## Layout spec
+
+These tables mirror the constants at the top of the `<script>` in `public/index.html`. Change both
+together.
+
+### Episode tile
 
 | Element | Size |
 |---|---|
@@ -135,6 +162,64 @@ them puts API access at risk.
 | Image area (each panel) | 1402px wide |
 | Right panel height | 2890px (full canvas height minus borders) |
 | Left panel height | 1402px (square) |
+
+### Social Sharing Graphic (`PLATE`, `LOCKUP`)
+
+The tile with a solid `#10a544` plate in the top-left or bottom-left square (never the guest panel).
+
+| Element | Size |
+|---|---|
+| Plate | 1200×1200, centred in the 1402px square (about 100px of art shows around it) |
+| Plate inner margin | 80px |
+| Stacked logo | 720px wordmark width; cabinet 0.637 × that tall, 0.058 gap, wordmark 0.278 |
+| Text | Black on green (6.5:1): "EPISODE N" in Jost 600, guest name in Jost 700, 1–3 balanced lines |
+
+The logo shrinks only if a long guest name would overflow the plate.
+
+### 16:9 YouTube thumbnail (`YT`)
+
+Matches podcast-publishing-suite's `youtube-thumb-bg` (commit 45e89bb) to within 1px.
+
+| Element | Position |
+|---|---|
+| Canvas | 1920×1080, `#10a544` |
+| Cabinet | 420px tall, centred in a 286px box at x 278, y 205 |
+| Wordmark | 659px wide at x 89, y 663 |
+| Tile | Scaled to 1080×1080 at x 840 |
+
+### Quote cards (`QUOTE_GEOM`)
+
+Laid out on a 1080px-wide base and scaled to the output (×2.78 for the 3000px 1:1). 4:5 is 1080×1350.
+
+| | Full wash 1:1 | Full wash 4:5 | Photo right 1:1 | Photo right 4:5 |
+|---|---|---|---|---|
+| Margin | 100 | 100 | 72 | 72 |
+| Horizontal logo width | 280 (top-right) | 350 (top-right) | 280 (top-left) | 350 (top-left) |
+| Quote column width | 880 | 880 | 497 | 594 |
+| Photo starts at x | — | — | 432 | 454 |
+| Quote size (EB Garamond) | 76 → 26 | 76 → 26 | 64 → 22 | 64 → 22 |
+| Attribution (Jost 600 caps) | 32 | 38 | 32 | 38 |
+
+- **Quote:** balanced line breaks, a hanging “ in the margin, and typographic quotes, apostrophes and
+  dashes. The quote and attribution are centred as one block below the logo.
+- **Attribution:** a 56×4 rule, then the credit line (or the guest name), then "WONDER CABINET · EP. N"
+  at 0.78 of that size.
+- **Full wash:** the photo is blurred at 2.5% of the output width under a colorway wash (opacity 0.45 at
+  the top → 0.86 → 0.95 at the bottom).
+- **Photo right:** the photo is blurred at 1.5% of the width. The colour field stays solid until 24px
+  past the quote column, then fades out over 18% of the photo width; the blurred copy fades out over
+  32%.
+- **Contrast check:** the page measures the rendered backdrop under the quote, the attribution, the
+  quote mark and the wordmark. On Full wash it raises the wash, and adds a soft veil behind the logo,
+  until the quote reaches 4.5:1 and the logo and quote mark 3:1. Anything still short is flagged as
+  "low contrast" in Export Preview; it doesn't block export.
+
+| Colorway | Ground | Text | Accent | Logo |
+|---|---|---|---|---|
+| Night | `#0B0B0B` | Cream `#FFFAEB` | `#10A544` | Dark-ground |
+| Cabinet green | `#10A544` | Black | Black | Black cabinet + white wordmark |
+| Deep green | `#043013` | Cream | `#10A544` | Dark-ground |
+| Cream | `#FFFAEB` | Black | `#087834` | Light-ground |
 
 ## License
 

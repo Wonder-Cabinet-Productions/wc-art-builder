@@ -5,9 +5,16 @@
 <title>Wonder Cabinet — Episode Art Builder</title>
 <link rel="icon" href="wc-logo.png" type="image/png">
 <script src="https://cdn.jsdelivr.net/npm/exifr@7/dist/full.umd.js"></script>
+<!-- Zip for "Export all ready". Pinned with SRI; if it fails to load, export falls back to separate downloads. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" integrity="sha512-XMVd28F1oH/O71fzwBnV7HucLxVwtxf26XV8P4wPk26EDxuGZ91N8bsOttmnomcCD3CS5ZMRL50H0GgOHvegtg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<!-- Brand webfonts for the text drawn into the art: Jost stands in for Futura, EB Garamond for Adobe Garamond. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;500&family=Jost:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { background: #1a1a1a; color: #eee; font-family: system-ui, -apple-system, sans-serif; padding: 1.5rem 2rem; }
+  body { background: #1a1a1a; color: #e8e8e8; font-family: system-ui, -apple-system, sans-serif; padding: 1.5rem 2rem; }
+  button, input, select, textarea { font-family: inherit; }
 
   /* ── Header ─────────────────────────────────── */
   .header { display: flex; align-items: flex-start; gap: 1.25rem; max-width: 1500px; margin: 0 auto 1.75rem; }
@@ -18,263 +25,369 @@
   .dek a { color: #10a544; text-decoration: none; border-bottom: 1px solid color-mix(in oklch, #10a544, transparent 65%); transition: border-color 0.15s ease; }
   .dek a:hover { border-bottom-color: #10a544; }
 
+  /* ── Notices (font / logo / zip failures) ───── */
+  .notices { max-width: 1500px; margin: 0 auto 1rem; }
+  .notices p { color: #e0a040; font-size: 0.8rem; line-height: 1.5; margin-bottom: 0.25rem; }
+
   /* ── Layout ─────────────────────────────────── */
   .builder { display: flex; gap: 2rem; max-width: 1500px; margin: 0 auto 1.5rem; align-items: flex-start; }
-  .preview-col { flex: 0 0 420px; position: sticky; top: 1.5rem; }
+  .preview-col { flex: 0 0 420px; }
   .picker { flex: 1; min-width: 0; }
 
-  /* ── Preview frame ──────────────────────────── */
+  /* ── Format tabs + preview ──────────────────── */
+  .format-tabs { display: flex; margin-bottom: 0.6rem; border-bottom: 2px solid #333; width: 400px; }
+  .format-tab { flex: 1; padding: 0.45rem 0.1rem; background: transparent; border: none; color: #a0a0a0; font-size: 0.75rem; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; }
+  .format-tab:hover { color: #e8e8e8; }
+  .format-tab.active { color: #10a544; border-bottom-color: #10a544; }
+  .preview-stage { position: relative; width: 400px; }
   .preview-frame { width: 400px; height: 400px; background: #10a544; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 3px; padding: 3px; border-radius: 8px; }
   .slot { background: #000; overflow: hidden; position: relative; cursor: pointer; border-radius: 3px; user-select: none; }
   .slot#slot-tl { grid-column: 1; grid-row: 1; }
   .slot#slot-bl { grid-column: 1; grid-row: 2; }
   .slot#slot-right { grid-column: 2; grid-row: 1 / 3; }
-  .slot .slot-label { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #555; font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.05em; pointer-events: none; }
+  .slot .slot-label { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #999; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; pointer-events: none; }
   .slot.has-image .slot-label { display: none; }
   .slot.active-target { outline: 2px solid #fff; outline-offset: -2px; z-index: 1; }
   .slot canvas { width: 100%; height: 100%; display: block; }
+  #tagOverlay { position: absolute; left: 0; top: 0; width: 400px; height: 400px; pointer-events: none; border-radius: 8px; }
+  #formatCanvas { display: none; width: 400px; border-radius: 8px; cursor: grab; }
 
   /* ── Slot selector ──────────────────────────── */
-  .slot-controls { margin-top: 0.6rem; display: flex; gap: 0.4rem; }
-  .slot-btn { flex: 1; padding: 0.4rem 0.2rem; border: 2px solid #444; border-radius: 6px; background: #222; color: #ccc; cursor: pointer; font-size: 0.7rem; text-align: center; transition: all 0.15s; }
+  .slot-controls { margin-top: 0.6rem; display: flex; gap: 0.4rem; width: 400px; }
+  .slot-btn { flex: 1; padding: 0.4rem 0.2rem; border: 2px solid #444; border-radius: 6px; background: #222; color: #ccc; cursor: pointer; font-size: 0.75rem; text-align: center; transition: border-color 0.15s, color 0.15s; }
   .slot-btn:hover { border-color: #888; }
-  .slot-btn.active { border-color: #10a544; color: #10a544; background: #1a2e1f; }
+  .slot-btn.active { border-color: #10a544; color: #10a544; }
 
   /* ── Panel: generic ─────────────────────────── */
-  .panel { margin-top: 0.6rem; background: #222; border-radius: 8px; padding: 0.7rem; }
-  .panel h3 { font-size: 0.75rem; color: #10a544; margin-bottom: 0.4rem; }
-  .panel .hint { font-size: 0.65rem; color: #666; margin-bottom: 0.4rem; }
+  .panel { margin-top: 0.75rem; background: #222; border-radius: 8px; padding: 0.75rem; width: 400px; }
+  .panel h2 { font-size: 0.8rem; color: #10a544; margin-bottom: 0.4rem; font-weight: 600; }
+  .hint { font-size: 0.75rem; color: #a0a0a0; line-height: 1.5; margin-bottom: 0.4rem; }
 
-  /* ── Reposition controls ────────────────────── */
-  .zoom-row { display: flex; align-items: center; gap: 0.5rem; }
-  .zoom-row label { font-size: 0.7rem; color: #aaa; min-width: 35px; }
+  /* ── Controls ───────────────────────────────── */
+  .zoom-row, .control-row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.4rem; }
+  .zoom-row label, .control-row label { font-size: 0.75rem; color: #b0b0b0; min-width: 64px; }
   .zoom-row input[type="range"] { flex: 1; accent-color: #10a544; }
-  .zoom-row .zoom-val { font-size: 0.7rem; color: #ccc; min-width: 32px; text-align: right; }
-  .reset-btn { margin-top: 0.4rem; padding: 0.25rem 0.6rem; background: #333; border: 1px solid #555; color: #ccc; border-radius: 4px; font-size: 0.65rem; cursor: pointer; }
-  .reset-btn:hover { background: #444; }
+  .zoom-row .zoom-val { font-size: 0.75rem; color: #ccc; min-width: 36px; text-align: right; }
+  .control-row select { flex: 1; background: #1a1a1a; border: 1px solid #444; color: #e8e8e8; padding: 0.3rem 0.4rem; border-radius: 4px; font-size: 0.75rem; }
+  .btn { padding: 0.3rem 0.7rem; background: #2a2a2a; border: 1px solid #555; color: #ddd; border-radius: 4px; font-size: 0.75rem; cursor: pointer; }
+  .btn:hover { border-color: #888; }
+  .btn:disabled { color: #9a9a9a; border-color: #3a3a3a; cursor: default; }
+  .btn-accent { background: transparent; border: 1px solid #10a544; color: #10a544; }
+  .btn-accent:hover { background: #15251a; border-color: #10a544; }
+  .btn-accent:disabled { border-color: #444; color: #9a9a9a; background: transparent; }
+  .btn-primary { padding: 0.5rem 1rem; background: #10a544; color: #0b0b0b; border: none; border-radius: 6px; font-size: 0.8rem; font-weight: 600; cursor: pointer; }
+  .btn-primary:hover { background: #14b84d; }
+  .btn-primary:disabled { background: #2a2a2a; color: #9a9a9a; cursor: default; }
+  .swatches { display: flex; gap: 0.4rem; flex: 1; align-items: center; }
+  .swatch { width: 28px; height: 28px; border: 2px solid #444; cursor: pointer; padding: 0; }
+  .swatch.active { border-color: #e8e8e8; }
+  .swatch-name { font-size: 0.75rem; color: #b0b0b0; margin-left: 0.25rem; }
+  .contrast-note { font-size: 0.75rem; line-height: 1.5; margin-top: 0.4rem; color: #a0a0a0; }
+  .contrast-note.warn { color: #e0a040; }
 
-  /* ── Export controls ─────────────────────────── */
-  .export-row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.35rem; }
-  .export-row label { font-size: 0.7rem; color: #aaa; min-width: 50px; }
-  .export-row input[type="text"] { flex: 1; background: #1a1a1a; border: 1px solid #444; color: #eee; padding: 0.25rem 0.4rem; border-radius: 4px; font-size: 0.7rem; font-family: monospace; }
-  .export-row input[type="range"] { flex: 1; accent-color: #10a544; }
-  .export-row .val { font-size: 0.7rem; color: #ccc; min-width: 28px; text-align: right; }
-  .export-btn { margin-top: 0.4rem; width: 100%; padding: 0.5rem; background: #10a544; color: #fff; border: none; border-radius: 6px; font-size: 0.8rem; font-weight: 600; cursor: pointer; }
-  .export-btn:hover { background: #0d8a38; }
-  .export-btn:disabled { background: #333; color: #666; cursor: default; }
-  .export-status { font-size: 0.65rem; color: #888; margin-top: 0.25rem; text-align: center; min-height: 1em; }
-
-  /* ── Credits display ────────────────────────── */
-  .credit-line { color: #aaa; font-size: 0.7rem; line-height: 1.5; }
-  .credit-line a { color: #10a544; text-decoration: none; }
-
-  /* ── Credits markdown preview ────────────────── */
-  .credits-md { position: relative; margin-top: 0.5rem; }
-  .credits-md pre { background: #111; color: #aaa; font-size: 0.6rem; line-height: 1.5; padding: 0.6rem 0.6rem 0.6rem; border-radius: 4px; white-space: pre-wrap; word-wrap: break-word; max-height: 220px; overflow-y: auto; font-family: 'SF Mono', Monaco, 'Courier New', monospace; margin: 0; }
-  .credits-md .copy-btn { position: absolute; top: 0.3rem; right: 0.3rem; padding: 0.2rem 0.5rem; background: #333; border: 1px solid #555; color: #ccc; border-radius: 3px; font-size: 0.6rem; cursor: pointer; transition: all 0.15s; z-index: 1; }
-  .credits-md .copy-btn:hover { background: #444; border-color: #10a544; color: #10a544; }
-  .credits-md .copy-btn.copied { background: #10a544; color: #fff; border-color: #10a544; }
+  /* ── Quote card strip (left) ────────────────── */
+  .quote-cards { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.6rem; }
+  .quote-mini { position: relative; cursor: pointer; text-align: center; background: none; border: none; color: inherit; padding: 0; }
+  .quote-mini canvas { width: 64px; height: 64px; display: block; border: 2px solid #444; }
+  .quote-mini.active canvas { border-color: #10a544; }
+  .quote-mini .mini-label { font-size: 0.75rem; color: #a0a0a0; margin-top: 0.2rem; }
 
   /* ── Saved combos ───────────────────────────── */
-  .saved-row { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 0.4rem; }
+  .saved-row { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.4rem; }
   .saved-mini { width: 72px; cursor: pointer; position: relative; }
   .saved-mini:hover { transform: scale(1.05); }
   .saved-mini .mini-grid { width: 72px; height: 72px; background: #10a544; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 1px; padding: 1px; border-radius: 3px; }
-  .saved-mini .mini-grid img { width: 100%; height: 100%; object-fit: cover; }
+  .saved-mini .mini-grid img, .saved-mini .mini-grid span { width: 100%; height: 100%; object-fit: cover; background: #000; display: block; }
   .saved-mini .mini-grid .tl { grid-column: 1; grid-row: 1; }
   .saved-mini .mini-grid .bl { grid-column: 1; grid-row: 2; }
   .saved-mini .mini-grid .rt { grid-column: 2; grid-row: 1 / 3; }
-  .saved-mini .mini-label { font-size: 0.5rem; color: #888; text-align: center; margin-top: 0.15rem; }
-  .saved-mini .mini-x { position: absolute; top: -4px; right: -4px; width: 14px; height: 14px; background: #e55; color: #fff; border: none; border-radius: 50%; font-size: 0.55rem; cursor: pointer; display: none; line-height: 14px; text-align: center; }
+  .saved-mini .mini-label { font-size: 0.75rem; color: #a0a0a0; text-align: center; margin-top: 0.15rem; }
+  .mini-x { position: absolute; top: -6px; right: -6px; width: 18px; height: 18px; background: #c44; color: #fff; border: none; border-radius: 50%; font-size: 0.75rem; cursor: pointer; display: none; line-height: 18px; text-align: center; padding: 0; }
   .saved-mini:hover .mini-x { display: block; }
-  .save-btn { padding: 0.3rem 0.6rem; background: #333; border: 1px solid #10a544; color: #10a544; border-radius: 4px; font-size: 0.65rem; cursor: pointer; }
-  .save-btn:hover { background: #1a2e1f; }
-  .save-btn:disabled { border-color: #444; color: #555; cursor: default; background: #222; }
 
-  /* ── Picker tabs ────────────────────────────── */
-  .picker-tabs { display: flex; gap: 0; margin-bottom: 1rem; border-bottom: 2px solid #333; }
-  .picker-tab { padding: 0.5rem 1.25rem; background: transparent; border: none; color: #888; font-size: 0.85rem; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.15s; }
-  .picker-tab:hover { color: #ccc; }
+  /* ── Input tabs (right) ─────────────────────── */
+  .picker-tabs { display: flex; margin-bottom: 1rem; border-bottom: 2px solid #333; }
+  .picker-tab { padding: 0.5rem 1.25rem; background: transparent; border: none; color: #a0a0a0; font-size: 0.85rem; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; }
+  .picker-tab:hover { color: #e8e8e8; }
   .picker-tab.active { color: #10a544; border-bottom-color: #10a544; }
   .tab-content { display: none; }
   .tab-content.active { display: block; }
 
+  /* ── Episode & Quotes tab ───────────────────── */
+  .inputs-head { font-size: 0.85rem; color: #10a544; margin: 0 0 0.5rem; border-bottom: 1px solid #333; padding-bottom: 0.3rem; max-width: 760px; font-weight: 600; }
+  .episode-fields { display: flex; gap: 1rem; max-width: 760px; margin-bottom: 1.5rem; }
+  .episode-fields label { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.75rem; color: #b0b0b0; }
+  .episode-fields label:first-child { flex: 0 0 8rem; }
+  .episode-fields label:last-child { flex: 1; }
+  .episode-fields input { background: #222; border: 1px solid #444; color: #e8e8e8; padding: 0.45rem 0.6rem; border-radius: 6px; font-size: 0.85rem; }
+  .quotes-dek { color: #b8b8b8; font-size: 0.8rem; line-height: 1.6; max-width: 62ch; margin-bottom: 0.75rem; }
+  .bulk-quotes { width: 100%; max-width: 760px; min-height: 9rem; background: #222; border: 1px solid #444; color: #e8e8e8; padding: 0.6rem 0.75rem; border-radius: 6px; font-size: 0.85rem; line-height: 1.5; resize: vertical; display: block; margin-bottom: 0.5rem; }
+  .episode-fields input:focus, .bulk-quotes:focus, .quote-row textarea:focus, .quote-row input:focus, .search-bar input:focus { outline: none; border-color: #10a544; }
+  .bulk-status { font-size: 0.75rem; color: #a0a0a0; margin-left: 0.5rem; }
+  .quote-list { display: flex; flex-direction: column; gap: 1rem; max-width: 760px; margin-top: 1.5rem; }
+  .quote-row { padding-bottom: 1rem; border-bottom: 1px solid #333; }
+  .quote-row-head { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.4rem; font-size: 0.75rem; color: #b0b0b0; }
+  .quote-row.active .quote-row-head span:first-child { color: #10a544; }
+  .quote-row-head .spacer { flex: 1; }
+  .quote-row textarea { width: 100%; min-height: 4.5em; background: #222; border: 1px solid #444; color: #e8e8e8; padding: 0.45rem 0.55rem; border-radius: 4px; font-size: 0.85rem; line-height: 1.5; resize: vertical; display: block; }
+  .quote-row input { width: 100%; margin-top: 0.35rem; background: #222; border: 1px solid #444; color: #e8e8e8; padding: 0.35rem 0.55rem; border-radius: 4px; font-size: 0.8rem; }
+
   /* ── Unsplash search ────────────────────────── */
   .search-bar { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
-  .search-bar input { flex: 1; background: #222; border: 1px solid #444; color: #eee; padding: 0.5rem 0.75rem; border-radius: 6px; font-size: 0.85rem; }
-  .search-bar input:focus { outline: none; border-color: #10a544; }
-  .search-bar button { padding: 0.5rem 1rem; background: #10a544; color: #fff; border: none; border-radius: 6px; font-size: 0.85rem; cursor: pointer; font-weight: 600; }
-  .search-bar button:hover { background: #0d8a38; }
-  .search-bar button:disabled { background: #333; color: #666; }
-  .search-status { font-size: 0.7rem; color: #888; margin-bottom: 0.75rem; min-height: 1em; }
+  .search-bar input { flex: 1; background: #222; border: 1px solid #444; color: #e8e8e8; padding: 0.5rem 0.75rem; border-radius: 6px; font-size: 0.85rem; }
+  .search-status { font-size: 0.75rem; color: #a0a0a0; margin-bottom: 0.75rem; min-height: 1em; }
   .search-results { display: flex; gap: 0.75rem; flex-wrap: wrap; }
-  .search-empty { color: #555; font-size: 0.8rem; padding: 2rem; text-align: center; }
+  .search-empty { color: #a0a0a0; font-size: 0.8rem; padding: 2rem 0; }
 
   /* ── Upload zone ────────────────────────────── */
-  .drop-zone { border: 2px dashed #444; border-radius: 8px; padding: 2rem; text-align: center; cursor: pointer; transition: all 0.2s; margin-bottom: 1rem; }
-  .drop-zone:hover, .drop-zone.dragover { border-color: #10a544; background: #1a2e1f; }
-  .drop-zone p { color: #888; font-size: 0.85rem; }
-  .drop-zone .drop-hint { color: #555; font-size: 0.7rem; margin-top: 0.4rem; }
+  .drop-zone { border: 2px dashed #444; border-radius: 8px; padding: 2rem; cursor: pointer; transition: border-color 0.2s; margin-bottom: 1rem; }
+  .drop-zone:hover, .drop-zone.dragover { border-color: #10a544; }
+  .drop-zone p { color: #b0b0b0; font-size: 0.85rem; }
+  .drop-zone .drop-hint { color: #a0a0a0; font-size: 0.75rem; margin-top: 0.4rem; }
   .drop-zone input[type="file"] { display: none; }
 
   /* ── Credit edit form ───────────────────────── */
-  .credit-form { background: #2a2a2a; border-radius: 6px; padding: 0.75rem; margin-bottom: 0.75rem; border: 1px solid #10a544; }
-  .credit-form h4 { font-size: 0.8rem; color: #10a544; margin-bottom: 0.5rem; }
+  .credit-form { background: #222; border-radius: 6px; padding: 0.75rem; margin-bottom: 0.75rem; border: 1px solid #10a544; overflow: hidden; }
+  .credit-form h3 { font-size: 0.8rem; color: #10a544; margin-bottom: 0.5rem; }
   .credit-form .form-row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.35rem; }
-  .credit-form .form-row label { font-size: 0.7rem; color: #aaa; min-width: 75px; }
-  .credit-form .form-row input, .credit-form .form-row select { flex: 1; background: #1a1a1a; border: 1px solid #444; color: #eee; padding: 0.25rem 0.4rem; border-radius: 4px; font-size: 0.7rem; }
-  .credit-form .form-row select { cursor: pointer; }
+  .credit-form .form-row label { font-size: 0.75rem; color: #b0b0b0; min-width: 90px; }
+  .credit-form .form-row input, .credit-form .form-row select { flex: 1; background: #1a1a1a; border: 1px solid #444; color: #e8e8e8; padding: 0.3rem 0.4rem; border-radius: 4px; font-size: 0.75rem; }
   .credit-form .form-actions { display: flex; gap: 0.4rem; margin-top: 0.5rem; }
-  .credit-form .form-actions button { padding: 0.3rem 0.75rem; border-radius: 4px; font-size: 0.7rem; cursor: pointer; border: none; }
-  .credit-form .form-actions .btn-add { background: #10a544; color: #fff; }
-  .credit-form .form-actions .btn-cancel { background: #444; color: #ccc; }
+  .meta-hint { font-size: 0.75rem; margin-bottom: 0.4rem; color: #10a544; }
+  .meta-hint.warn { color: #e0a040; }
 
   /* ── Source cards (shared) ───────────────────── */
   .source-pool { margin-top: 1rem; }
-  .source-pool h3 { font-size: 0.85rem; color: #10a544; margin-bottom: 0.5rem; border-bottom: 1px solid #333; padding-bottom: 0.3rem; }
+  .source-pool h2 { font-size: 0.85rem; color: #10a544; margin-bottom: 0.5rem; border-bottom: 1px solid #333; padding-bottom: 0.3rem; font-weight: 600; }
   .source-cards { display: flex; gap: 0.75rem; flex-wrap: wrap; }
   .source-card { width: 140px; cursor: pointer; transition: transform 0.15s; position: relative; }
   .source-card:hover { transform: scale(1.04); }
   .source-card img { width: 140px; height: 140px; object-fit: cover; border-radius: 6px; border: 2px solid transparent; transition: border-color 0.15s; }
   .source-card:hover img { border-color: #10a544; }
-  .source-card .code { font-size: 0.7rem; font-weight: 700; color: #ccc; text-align: center; margin-top: 0.2rem; }
-  .source-card .credit { font-size: 0.55rem; color: #888; text-align: center; line-height: 1.3; margin-top: 0.1rem; }
+  .source-card .code { font-size: 0.75rem; font-weight: 700; color: #ddd; text-align: center; margin-top: 0.2rem; }
+  .source-card .credit { font-size: 0.75rem; color: #a0a0a0; text-align: center; line-height: 1.3; margin-top: 0.1rem; }
   .source-card .credit a { color: #10a544; text-decoration: none; }
-  .source-card .card-remove { position: absolute; top: -4px; right: -4px; width: 18px; height: 18px; background: #e55; color: #fff; border: none; border-radius: 50%; font-size: 0.65rem; cursor: pointer; display: none; line-height: 18px; text-align: center; }
+  .source-card .load-warn { font-size: 0.75rem; color: #e0a040; text-align: center; margin-top: 0.1rem; }
+  .source-card .card-remove { position: absolute; top: -6px; right: -6px; width: 20px; height: 20px; background: #c44; color: #fff; border: none; border-radius: 50%; font-size: 0.75rem; cursor: pointer; display: none; line-height: 20px; text-align: center; padding: 0; }
   .source-card:hover .card-remove { display: block; }
-  .source-card .card-edit { position: absolute; top: -4px; left: -4px; width: 18px; height: 18px; background: #4a90d9; color: #fff; border: none; border-radius: 50%; font-size: 0.6rem; cursor: pointer; display: none; line-height: 18px; text-align: center; }
-  .source-card:hover .card-edit { display: block; }
+
+  /* ── Export Preview ─────────────────────────── */
+  .export-pane { max-width: 1500px; margin: 0 auto 1.5rem; padding-top: 1.25rem; border-top: 1px solid #333; }
+  .export-pane-head { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 1rem 1.5rem; }
+  .export-pane-head h2 { font-size: 1.1rem; color: #e8e8e8; align-self: center; }
+  .pane-field { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.75rem; color: #b0b0b0; }
+  .pane-field input[type="text"] { background: #222; border: 1px solid #444; color: #e8e8e8; padding: 0.35rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-family: ui-monospace, 'SF Mono', Monaco, monospace; width: 18rem; }
+  .pane-quality { display: flex; align-items: center; gap: 0.5rem; }
+  .pane-quality input { accent-color: #10a544; width: 9rem; }
+  .pane-quality .val { font-size: 0.75rem; color: #ccc; }
+  .pane-spacer { flex: 1; }
+  .export-status { font-size: 0.8rem; color: #b0b0b0; margin: 0.6rem 0 0; min-height: 1.2em; line-height: 1.5; }
+  .export-status.error { color: #e0a040; }
+  .asset-group-head { font-size: 0.8rem; color: #10a544; margin: 1.25rem 0 0.6rem; font-weight: 600; }
+  .asset-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1.5rem 1rem; align-items: start; }
+  .asset .thumb-box { height: 170px; display: flex; align-items: flex-end; }
+  .asset canvas { display: block; max-width: 100%; max-height: 170px; border-radius: 3px; }
+  .asset .asset-name { font-size: 0.8rem; color: #e8e8e8; margin-top: 0.45rem; }
+  .asset .asset-file { font-size: 0.75rem; color: #a0a0a0; font-family: ui-monospace, 'SF Mono', Monaco, monospace; margin-top: 0.15rem; word-break: break-all; }
+  .asset .asset-status { font-size: 0.75rem; margin-top: 0.25rem; color: #b0b0b0; line-height: 1.4; }
+  .asset .asset-status.ready { color: #10a544; }
+  .asset .asset-status.warn { color: #e0a040; }
+  .asset .btn-accent { margin-top: 0.4rem; }
+  .pane-credits { margin-top: 2rem; max-width: 760px; }
+  .pane-credits h3 { font-size: 0.8rem; color: #10a544; margin-bottom: 0.4rem; font-weight: 600; }
+  .credit-line { color: #b8b8b8; font-size: 0.8rem; line-height: 1.6; }
+  .credit-line a { color: #10a544; text-decoration: none; }
+  .credits-md { position: relative; margin-top: 0.6rem; }
+  .credits-md pre { background: #111; color: #b8b8b8; font-size: 0.75rem; line-height: 1.5; padding: 0.6rem; border-radius: 4px; white-space: pre-wrap; word-wrap: break-word; max-height: 280px; overflow-y: auto; font-family: ui-monospace, 'SF Mono', Monaco, monospace; }
+  .credits-md .copy-btn { position: absolute; top: 0.35rem; right: 0.35rem; z-index: 1; }
 
   /* ── Lightbox ────────────────────────────────── */
   .lightbox { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.92); z-index: 100; justify-content: center; align-items: center; flex-direction: column; }
   .lightbox.active { display: flex; }
   .lightbox img { max-width: 90vw; max-height: 85vh; border-radius: 8px; }
-  .lightbox .caption { color: #ccc; font-size: 0.85rem; margin-top: 0.75rem; text-align: center; }
+  .lightbox .caption { color: #ccc; font-size: 0.85rem; margin-top: 0.75rem; }
   .lightbox .close { position: absolute; top: 1rem; right: 1.5rem; font-size: 2rem; color: #fff; cursor: pointer; }
 
   /* ── Footer ──────────────────────────────────── */
-  .footer { display: flex; align-items: center; justify-content: center; gap: 1.5rem; margin-top: 1.5rem; padding-top: 0.75rem; border-top: 1px solid #222; }
-  .footer-brand { display: flex; align-items: center; gap: 0.4rem; }
-  .footer-brand img { height: 24px; opacity: 0.3; }
-  .footer-brand span { font-size: 0.6rem; color: #444; }
-  .footer-divider { color: #333; font-size: 0.7rem; }
-  .footer-credit { display: flex; align-items: center; gap: 0.4rem; }
-  .footer-credit img { height: 22px; border-radius: 50%; opacity: 0.5; filter: invert(1); }
-  .footer-credit a { font-size: 0.6rem; color: #555; text-decoration: none; }
+  .instructions { color: #a0a0a0; font-size: 0.75rem; max-width: 1500px; margin: 0.75rem auto 0; line-height: 1.5; }
+  .footer { display: flex; align-items: center; gap: 1.5rem; max-width: 1500px; margin: 1.5rem auto 0; padding-top: 0.75rem; border-top: 1px solid #2a2a2a; }
+  .footer-brand, .footer-credit { display: flex; align-items: center; gap: 0.4rem; }
+  .footer-brand img { height: 24px; opacity: 0.5; }
+  .footer-brand span, .footer-credit a { font-size: 0.75rem; color: #999; text-decoration: none; }
+  .footer-credit img { height: 22px; border-radius: 50%; opacity: 0.6; filter: invert(1); }
   .footer-credit a:hover { color: #10a544; }
-  .instructions { text-align: center; color: #555; font-size: 0.65rem; margin-top: 0.75rem; max-width: 600px; margin-left: auto; margin-right: auto; line-height: 1.5; }
+  .footer-divider { color: #555; font-size: 0.75rem; }
 </style>
 </head>
 <body>
-
 
 <div class="header">
   <img src="wc-logo.png" alt="Wonder Cabinet">
   <div class="header-text">
     <h1>Episode Art Builder</h1>
-    <p class="dek">Original design by <a href="https://artandsons.com/" target="_blank" rel="noopener">Art + Sons</a>. This tool generates art for new Wonder Cabinet episodes — the guest image goes on the right in the larger pane, and the left two images should tie into the conversation in interesting ways. Try different combinations to find a good balance of color and visual interest.</p>
+    <p class="dek">Original design by <a href="https://artandsons.com/" target="_blank" rel="noopener">Art + Sons</a>. This tool generates art for new Wonder Cabinet episodes — the guest image goes on the right in the larger pane, and the left two images should tie into the conversation in interesting ways. From the same three images it also makes the Social Sharing Graphic, a 16:9 YouTube thumbnail, and quote cards for each pull quote.</p>
   </div>
 </div>
 
+<div class="notices" id="notices" role="status" aria-live="polite"></div>
+
 <div class="builder">
-  <!-- ── Left column: preview + controls ──────── -->
+  <!-- ── Left column: format preview + controls ──────── -->
   <div class="preview-col">
-    <div class="preview-frame" id="preview">
-      <div class="slot active-target" id="slot-tl" onclick="setActiveSlot('tl')"><span class="slot-label">Top Left</span></div>
-      <div class="slot" id="slot-right" onclick="setActiveSlot('right')"><span class="slot-label">Right (portrait)</span></div>
-      <div class="slot" id="slot-bl" onclick="setActiveSlot('bl')"><span class="slot-label">Bottom Left</span></div>
+    <div class="format-tabs" role="tablist">
+      <button class="format-tab active" data-format="tile" onclick="setFormat('tile')">Tile</button>
+      <button class="format-tab" data-format="social" onclick="setFormat('social')">Social</button>
+      <button class="format-tab" data-format="quote" onclick="setFormat('quote')">Quote 1:1</button>
+      <button class="format-tab" data-format="quote45" onclick="setFormat('quote45')">Quote 4:5</button>
+      <button class="format-tab" data-format="youtube" onclick="setFormat('youtube')">16:9</button>
+    </div>
+    <div class="preview-stage">
+      <div class="preview-frame" id="preview">
+        <div class="slot active-target" id="slot-tl" onclick="setActiveSlot('tl')"><span class="slot-label">Top Left</span></div>
+        <div class="slot" id="slot-right" onclick="setActiveSlot('right')"><span class="slot-label">Right (portrait)</span></div>
+        <div class="slot" id="slot-bl" onclick="setActiveSlot('bl')"><span class="slot-label">Bottom Left</span></div>
+      </div>
+      <canvas id="tagOverlay"></canvas>
+      <canvas id="formatCanvas"></canvas>
     </div>
 
-    <div class="slot-controls">
-      <div class="slot-btn active" id="btn-tl" onclick="setActiveSlot('tl')">Top Left</div>
-      <div class="slot-btn" id="btn-bl" onclick="setActiveSlot('bl')">Bottom Left</div>
-      <div class="slot-btn" id="btn-right" onclick="setActiveSlot('right')">Right</div>
+    <div class="slot-controls" id="slotControls">
+      <button class="slot-btn active" id="btn-tl" onclick="setActiveSlot('tl')">Top Left</button>
+      <button class="slot-btn" id="btn-bl" onclick="setActiveSlot('bl')">Bottom Left</button>
+      <button class="slot-btn" id="btn-right" onclick="setActiveSlot('right')">Right</button>
+    </div>
+
+    <div class="panel" id="panelQuote" style="display:none">
+      <h2>Quote Cards</h2>
+      <div class="quote-cards" id="quoteCards"></div>
+      <button class="btn btn-accent" onclick="addQuoteCard()" style="margin-bottom:0.75rem">+ New quote card</button>
+      <div class="control-row"><label for="quoteLayout">Layout</label>
+        <select id="quoteLayout" onchange="onQuoteLayout()">
+          <option value="wash">Full wash</option>
+          <option value="fade">Photo right</option>
+        </select>
+      </div>
+      <div class="control-row"><label for="quoteSlot">Photo</label>
+        <select id="quoteSlot" onchange="onQuoteSlot()">
+          <option value="right">Right panel (guest)</option>
+          <option value="tl">Top left panel</option>
+          <option value="bl">Bottom left panel</option>
+        </select>
+      </div>
+      <div class="control-row"><label>Colorway</label><div class="swatches" id="swatches"></div></div>
+      <p class="contrast-note" id="quoteContrast"></p>
+      <p class="hint" style="margin-top:0.4rem">Click a card to set its layout, photo and colorway. Drag the preview to reposition its photo. Wording lives in the Episode &amp; Quotes tab.</p>
     </div>
 
     <div class="panel">
-      <h3>Adjust Position</h3>
-      <p class="hint">Drag inside the frame to reposition.</p>
+      <h2 id="positionHead">Adjust Position</h2>
+      <p class="hint" id="positionHint">Drag inside the frame to reposition.</p>
       <div class="zoom-row">
-        <label>Zoom</label>
+        <label for="zoomSlider">Zoom</label>
         <input type="range" id="zoomSlider" min="100" max="200" value="100" oninput="onZoom()">
         <span class="zoom-val" id="zoomVal">100%</span>
       </div>
-      <button class="reset-btn" onclick="resetPosition()">Reset position</button>
+      <button class="btn" onclick="resetPosition()">Reset position</button>
+    </div>
+
+    <div class="panel" id="panelSocial" style="display:none">
+      <h2>Social Sharing Graphic</h2>
+      <div class="control-row"><label for="socialSlot">Logo in</label>
+        <select id="socialSlot" onchange="onSocialSlot()">
+          <option value="tl">Top left square</option>
+          <option value="bl">Bottom left square</option>
+        </select>
+      </div>
+      <p class="hint">A green plate with the show logo, episode number and guest name sits in one of the two left squares. Enter Episode # and Guest in the Episode &amp; Quotes tab.</p>
     </div>
 
     <div class="panel">
-      <h3>Export</h3>
-      <div class="export-row">
-        <label>Filename</label>
-        <input type="text" id="exportName" value="episode-art.jpg">
-      </div>
-      <div class="export-row">
-        <label>Quality</label>
-        <input type="range" id="qualitySlider" min="60" max="100" value="92" oninput="document.getElementById('qualityVal').textContent=this.value+'%'">
-        <span class="val" id="qualityVal">92%</span>
-      </div>
-      <button class="export-btn" id="exportBtn" onclick="exportImage()" disabled>Export 3000 &times; 3000</button>
-      <button class="export-btn" id="exportCreditsBtn" onclick="exportCredits()" disabled style="background:#333;color:#10a544;border:1px solid #10a544;margin-top:0.3rem;">Export credits.md</button>
-      <div class="export-status" id="exportStatus"></div>
-    </div>
-
-    <div class="panel">
-      <h3>Credits</h3>
-      <div id="creditLines"><span class="credit-line">Add images to see credits.</span></div>
-      <div class="credits-md" id="creditsMdWrap" style="display:none">
-        <button class="copy-btn" id="copyBtn" onclick="copyCredits()">Copy</button>
-        <pre id="creditsMdPre"></pre>
-      </div>
-    </div>
-
-    <div class="panel">
-      <h3>Saved Combinations</h3>
+      <h2>Saved Combinations</h2>
       <div class="saved-row" id="savedRow"></div>
-      <button class="save-btn" id="saveBtn" onclick="saveCombo()" disabled>Save this combo</button>
+      <button class="btn btn-accent" id="saveBtn" onclick="saveCombo()" disabled>Save this combo</button>
     </div>
   </div>
 
-  <!-- ── Right column: source picker ──────────── -->
+  <!-- ── Right column: inputs ──────────── -->
   <div class="picker">
-    <div class="picker-tabs">
-      <button class="picker-tab" onclick="switchTab('search')">Unsplash Search</button>
-      <button class="picker-tab active" onclick="switchTab('upload')">Upload Images</button>
+    <div class="picker-tabs" role="tablist">
+      <button class="picker-tab active" data-tab="quotes" onclick="switchTab('quotes')">Episode &amp; Quotes</button>
+      <button class="picker-tab" data-tab="upload" onclick="switchTab('upload')">Upload Images</button>
+      <button class="picker-tab" data-tab="search" onclick="switchTab('search')">Unsplash Search</button>
     </div>
 
-    <!-- Unsplash search tab -->
+    <div class="tab-content active" id="tab-quotes">
+      <h2 class="inputs-head">Episode</h2>
+      <div class="episode-fields">
+        <label>Episode #<input type="text" id="epNum" placeholder="e.g. 28" oninput="onEpisodeInput()"></label>
+        <label>Guest<input type="text" id="guestName" placeholder="e.g. Hannah Fries" oninput="onEpisodeInput()"></label>
+      </div>
+      <h2 class="inputs-head">Quotes</h2>
+      <p class="quotes-dek">Paste one or more pull quotes, separated by a blank line, and each becomes a quote card. Quote marks around a quote are removed, and apostrophes, quote marks and dashes are set typographically. Edit any card's wording below.</p>
+      <textarea id="bulkQuotes" class="bulk-quotes" aria-label="Paste pull quotes" placeholder="Giving a name to something brings it literally into our lexicon…&#10;&#10;So much of what's happening in a forest is this churning of life and death together…"></textarea>
+      <button class="btn btn-accent" onclick="addBulkQuotes()">Add as quote cards</button><span class="bulk-status" id="bulkStatus"></span>
+      <div class="quote-list" id="quoteList"></div>
+    </div>
+
+    <div class="tab-content" id="tab-upload">
+      <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+        <p>Drop images here or click to browse</p>
+        <p class="drop-hint">JPG, PNG, WebP. Unsplash filenames are detected automatically for credits.</p>
+        <input type="file" id="fileInput" aria-label="Choose images" accept="image/*" multiple onchange="handleFiles(this.files)">
+      </div>
+      <div id="creditFormArea"></div>
+    </div>
+
     <div class="tab-content" id="tab-search">
       <div class="search-bar">
-        <input type="text" id="searchInput" placeholder="Search Unsplash... e.g. 'ammonite fossil'" onkeydown="if(event.key==='Enter')searchUnsplash()">
-        <button onclick="searchUnsplash()" id="searchBtn">Search</button>
+        <input type="text" id="searchInput" aria-label="Search Unsplash" placeholder="Search Unsplash... e.g. 'ammonite fossil'" onkeydown="if(event.key==='Enter')searchUnsplash()">
+        <button class="btn-primary" onclick="searchUnsplash()" id="searchBtn">Search</button>
       </div>
       <div class="search-status" id="searchStatus"></div>
       <div class="search-results" id="searchResults">
         <p class="search-empty" id="searchEmpty">Enter a search term to find images on Unsplash.</p>
       </div>
-      <button id="loadMoreBtn" style="display:none;margin:1rem auto;padding:0.4rem 1rem;background:#333;border:1px solid #555;color:#ccc;border-radius:4px;font-size:0.75rem;cursor:pointer;" onclick="loadMore()">Load more results</button>
+      <button class="btn" id="loadMoreBtn" style="display:none;margin:1rem 0;" onclick="loadMore()">Load more results</button>
     </div>
 
-    <!-- Upload tab -->
-    <div class="tab-content" id="tab-upload">
-      <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
-        <p>Drop images here or click to browse</p>
-        <p class="drop-hint">JPG, PNG, WebP. Unsplash filenames auto-detected for credits.</p>
-        <input type="file" id="fileInput" accept="image/*" multiple onchange="handleFiles(this.files)">
-      </div>
-      <div id="creditFormArea"></div>
-    </div>
-
-    <!-- Source pool (shared across tabs) -->
     <div class="source-pool" id="sourcePool" style="display:none">
-      <h3>Your Images <span id="poolCount" style="color:#888;font-weight:400"></span></h3>
+      <h2>Your Images <span id="poolCount" style="color:#a0a0a0;font-weight:400"></span></h2>
       <div class="source-cards" id="poolCards"></div>
     </div>
   </div>
 </div>
 
+<section class="export-pane" id="exportPane">
+  <div class="export-pane-head">
+    <h2>Export Preview</h2>
+    <label class="pane-field">Filename base
+      <input type="text" id="exportName" value="wondercabinet-guest" placeholder="wondercabinet-guest" oninput="onExportNameInput()">
+    </label>
+    <label class="pane-field">Quality
+      <span class="pane-quality">
+        <input type="range" id="qualitySlider" min="60" max="100" value="92" oninput="document.getElementById('qualityVal').textContent=this.value+'%'">
+        <span class="val" id="qualityVal">92%</span>
+      </span>
+    </label>
+    <span class="pane-spacer"></span>
+    <button class="btn-primary" id="exportAllBtn" onclick="exportAllReady()" disabled>Export all ready (0)</button>
+    <button class="btn btn-accent" id="exportCreditsBtn" onclick="exportCredits()" disabled>Download credits.md</button>
+  </div>
+  <div class="export-status" id="exportStatus" role="status" aria-live="polite"></div>
+  <div id="assetGrid"></div>
+  <div class="pane-credits">
+    <h3>Credits</h3>
+    <div id="creditLines"><span class="credit-line">Add images to see credits.</span></div>
+    <div class="credits-md" id="creditsMdWrap" style="display:none">
+      <button class="btn copy-btn" id="copyBtn" onclick="copyCredits()">Copy</button>
+      <pre id="creditsMdPre"></pre>
+    </div>
+  </div>
+</section>
+
 <p class="instructions">
-  Search Unsplash or upload your own images. Click a source to place it in the active slot.
-  Drag to reposition. Export downloads a production-ready 3000&times;3000 JPEG.
+  Upload or search for images and click one to place it in the active slot; drag to reposition.
+  Everything the episode can produce is listed in Export Preview. Nothing is saved: reloading the page discards your work.
 </p>
 
 <div class="footer">
@@ -284,20 +397,20 @@
   </div>
   <span class="footer-divider">|</span>
   <div class="footer-credit">
-    <img src="mark-logo.png" alt="Mark Riechers">
-    <a href="https://bymarkriechers.com" target="_blank">Built by Mark Riechers</a>
+    <img src="mark-logo.png" alt="">
+    <a href="https://bymarkriechers.com" target="_blank" rel="noopener">Built by Mark Riechers</a>
   </div>
 </div>
 
 <div class="lightbox" id="lightbox" onclick="closeLightbox()">
-  <span class="close">&times;</span>
-  <img id="lightbox-img" src="" alt="Full size preview">
+  <span class="close" aria-hidden="true">&times;</span>
+  <img id="lightbox-img" alt="Full size preview">
   <p class="caption" id="lightbox-caption"></p>
 </div>
 
 <script>
 // ══════════════════════════════════════════════════
-// LAYOUT CONSTANTS
+// LAYOUT CONSTANTS — mirrored in README.md "Layout spec". Change both together.
 // ══════════════════════════════════════════════════
 const CANVAS_SIZE = 3000;
 const GREEN = '#10a544';
@@ -307,6 +420,78 @@ const IMG_W = 1402, LEFT_H = 1402, RIGHT_H = 2890;
 const TL_X = OUTER, TL_Y = OUTER;
 const BL_X = OUTER, BL_Y = OUTER + LEFT_H + 2*PAD + GUTTER;
 const RT_X = OUTER + IMG_W + 2*PAD + GUTTER, RT_Y = OUTER;
+
+const CREAM = '#FFFAEB';
+
+// Output formats. Every exported filename derives from the filename base plus this suffix.
+const FORMATS = {
+  tile:    { label: 'Episode tile',           w: 3000, h: 3000, suffix: '' },
+  social:  { label: 'Social Sharing Graphic', w: 3000, h: 3000, suffix: '-social' },
+  youtube: { label: '16:9 YouTube thumbnail', w: 1920, h: 1080, suffix: '-youtube' },
+  quote:   { label: 'Quote card 1:1',         w: 3000, h: 3000 },
+  quote45: { label: 'Quote card 4:5',         w: 1080, h: 1350 }
+};
+
+// Social Sharing Graphic: a solid green plate set into one of the two left squares (never the guest
+// panel), centred, with about 100px of art showing around it. Black on #10a544 is 6.5:1 whatever the photo.
+const PLATE = { size: 1200, margin: 80, logoW: 720 };
+
+// Stacked cabinet over the "WONDER / CABINET" wordmark, as fractions of the wordmark width.
+const LOCKUP = { cabH: 0.637, gap: 0.058, wordH: 0.278 };
+
+// 16:9 geometry measured from podcast-publishing-suite's youtube-thumb-bg.png (commit 45e89bb).
+const YT = { W: 1920, H: 1080, artX: 840, cab: { x: 278, y: 205, h: 420, boxW: 286 }, word: { x: 89, y: 663, w: 659 } };
+
+// Quote cards are laid out on a 1080px-wide base and scaled by k = W / 1080.
+// sq = 1:1 (1080×1080 base, exported at 3000×3000); tall = 4:5 (1080×1350 base, exported 1:1).
+//   margin   — outer margin; the logo and the text column share it
+//   logoW    — horizontal logo width (top-right on Full wash, top-left on Photo right)
+//   logoGap  — space between the logo and the top of the text field
+//   textW    — width of the quote column, from the left margin
+//   photoX   — Photo right only: where the photo starts
+//   quote    — EB Garamond size range [start, min] and line height
+//   attr     — Jost 600 caps attribution: name size (the show/episode line is 0.78 of it) and minimum
+//   gap      — space between the last quote line and the attribution
+const QUOTE_GEOM = {
+  wash: {
+    sq:   { margin: 100, logoW: 280, logoGap: 48, textW: 880, quote: [76, 26], lh: 1.14, attr: [32, 22], gap: 52 },
+    tall: { margin: 100, logoW: 350, logoGap: 56, textW: 880, quote: [76, 26], lh: 1.14, attr: [38, 26], gap: 60 }
+  },
+  fade: {
+    sq:   { margin: 72, logoW: 280, logoGap: 60, textW: 497, photoX: 432, quote: [64, 22], lh: 1.16, attr: [32, 20], gap: 52 },
+    tall: { margin: 72, logoW: 350, logoGap: 64, textW: 594, photoX: 454, quote: [64, 22], lh: 1.16, attr: [38, 24], gap: 60 }
+  }
+};
+const ATTR_RULE = { w: 56, h: 4, indent: 76 };   // the short rule before the attribution
+const LOGO_H_RATIO = 740 / 2387;                  // horizontal logo PNGs are 2387×740
+
+// Blur radii as a fraction of the output width, so a thumbnail and the export look alike.
+const WASH_BLUR = 0.025, FADE_BLUR = 0.015;
+// Full wash: the colorway wash runs top to bottom through these opacities. When the photo under the
+// text is too busy for 4.5:1, every stop is pushed toward WASH_MAX until it passes.
+const WASH_STOPS = [[0, 0.45], [0.5, 0.86], [1, 0.95]], WASH_MAX = 0.97;
+// Photo right: the colour field stays solid until FADE.pad past the text column, then fades to clear
+// over FADE.colour × photo width. The blurred copy of the photo fades out over FADE.blur × photo width,
+// starting at the same point, so the blur shows past the end of the colour.
+const FADE = { pad: 24, colour: 0.18, blur: 0.32 };
+// TEMPORARY, for review: ?fade=b renders the alternative fade (colour field starts translucent).
+// Remove once a variant is chosen.
+const FADE_VARIANT = new URLSearchParams(location.search).get('fade') === 'b' ? 'b' : 'a';
+
+// Contrast targets checked against the rendered art (WCAG ratios).
+const CONTRAST = { text: 4.5, logo: 3.0, mark: 3.0 };
+
+// Colorways. logo = which horizontal brand logo reads on that ground: 'dark' (green cabinet, white
+// wordmark), 'light' (black cabinet, green wordmark), 'onGreen' (black cabinet, white wordmark — the
+// show-cover pairing, brand book p.3 "Logo on Green"). logoInk = the wordmark colour, for contrast checks.
+const COLORWAYS = {
+  night: { name: 'Night',         rgb: '11,11,11',    field: '#0B0B0B', ink: CREAM,     accent: '#10A544', logo: 'dark',    logoInk: '#FFFFFF' },
+  green: { name: 'Cabinet green', rgb: '16,165,68',   field: '#10A544', ink: '#000000', accent: '#000000', logo: 'onGreen', logoInk: '#FFFFFF' },
+  deep:  { name: 'Deep green',    rgb: '4,48,19',     field: '#043013', ink: CREAM,     accent: '#10A544', logo: 'dark',    logoInk: '#FFFFFF' },
+  cream: { name: 'Cream',         rgb: '255,250,235', field: CREAM,     ink: '#000000', accent: '#087834', logo: 'light',   logoInk: '#10A544' }
+};
+const QUOTE_LAYOUTS = { wash: 'Full wash', fade: 'Photo right' };
+const LAYOUT_SLUG = { wash: 'wash', fade: 'fade' };
 
 // ══════════════════════════════════════════════════
 // STATE
@@ -318,24 +503,130 @@ const slotData = {
   right: { img: null, code: null, credit: null, url: null, panX: 0.5, panY: 0.0, zoom: 1.0, targetW: IMG_W, targetH: RIGHT_H, sourceId: null }
 };
 const savedCombos = [];
-const sourcePool = []; // { id, img, thumbUrl, fullUrl, code, credit, url, source }
+const sourcePool = []; // { id, img, thumbUrl, fullUrl, code, credit, url, source, ready }
 let nextSourceId = 1;
 let searchPage = 1;
 let lastQuery = '';
+
+let activeFormat = 'tile';
+const socialState = { slot: 'tl' };
+
+// Quote cards. Each card carries its own wording, credit line, photo framing, layout and colorway.
+// A new card inherits the look of the active card, with empty wording.
+let nextCardId = 1;
+function newQuoteCard(from, text = '') {
+  const look = from
+    ? { slot: from.slot, panX: from.panX, panY: from.panY, zoom: from.zoom, colorway: from.colorway, layout: from.layout }
+    : { slot: 'right', panX: 0.5, panY: 0.25, zoom: 1.0, colorway: 'night', layout: 'wash' };
+  return { id: nextCardId++, text, attr: '', ...look };
+}
+const quoteCards = [newQuoteCard()];
+let activeCard = quoteCards[0];
+
+// Filename base follows the Guest field until the producer edits it by hand (clearing it resumes following).
+let exportNameEdited = false;
+
+// ══════════════════════════════════════════════════
+// SMALL HELPERS
+// ══════════════════════════════════════════════════
+const val = id => document.getElementById(id).value.trim();
+const imgReady = img => !!(img && img.naturalWidth > 0);
+const isQuoteFormat = fmt => fmt === 'quote' || fmt === 'quote45';
+const slugify = s => s.normalize('NFD').replace(/[\u0300-\u036F]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+const episodeNumber = () => val('epNum').replace(/^#/, '');
+
+function notice(msg) {
+  const box = document.getElementById('notices');
+  if ([...box.children].some(p => p.textContent === msg)) return;
+  const p = document.createElement('p');
+  p.textContent = msg;
+  box.appendChild(p);
+}
+
+function setExportStatus(msg, isError) {
+  const el = document.getElementById('exportStatus');
+  el.textContent = msg;
+  el.classList.toggle('error', !!isError);
+}
+
+// Every image the page draws goes through here. crossOrigin must be set before src, or the export
+// canvas is tainted and toBlob() fails.
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => img.naturalWidth > 0 ? resolve(img) : reject(new Error('image has no pixels'));
+    img.onerror = () => reject(new Error('could not load image'));
+    img.src = src;
+  });
+}
+
+// Stable ids for images, used in cache keys.
+const imgIds = new WeakMap();
+let nextImgId = 1;
+function imgId(img) {
+  if (!img) return 0;
+  if (!imgIds.has(img)) imgIds.set(img, nextImgId++);
+  return imgIds.get(img);
+}
+
+// ══════════════════════════════════════════════════
+// BRAND ASSETS + FONTS
+// ══════════════════════════════════════════════════
+const brandImgs = { logoH: {} };
+let brandError = null;
+const BRAND_FILES = {
+  cabinet: 'brand/cabinet-black.png',
+  cabinetGreen: 'brand/cabinet-green.png',
+  wordmark: 'brand/wordmark-title-white.png',
+  'logoH.dark': 'brand/logo-h-dark.png',
+  'logoH.light': 'brand/logo-h-light.png',
+  'logoH.onGreen': 'brand/logo-h-on-green.png'
+};
+const brandLoaded = Promise.allSettled(Object.entries(BRAND_FILES).map(([key, src]) =>
+  loadImage(src).then(img => {
+    const [a, b] = key.split('.');
+    if (b) brandImgs[a][b] = img; else brandImgs[a] = img;
+  }).catch(() => { throw src; })
+)).then(results => {
+  const failed = results.filter(r => r.status === 'rejected').map(r => r.reason);
+  if (failed.length) {
+    brandError = 'Logo failed to load';
+    notice('Some logo files failed to load (' + failed.join(', ') + '). The social graphic, 16:9 and quote cards can\u2019t be exported until the page is reloaded.');
+  }
+  clearRenderCaches();
+  updateButtons();
+});
+
+const FONT_FACES = ['700 100px Jost', '600 100px Jost', '400 100px "EB Garamond"'];
+let fontsOk = null;
+// Called at startup and again before every export, so an early export never falls back to system fonts.
+function ensureFonts() {
+  if (!document.fonts || !document.fonts.load) { fontsOk = false; return Promise.resolve(false); }
+  return Promise.all(FONT_FACES.map(f => document.fonts.load(f))).then(lists => {
+    const ok = lists.every(l => l.length > 0);
+    if (ok !== fontsOk) { fontsOk = ok; clearRenderCaches(); updateButtons(); }
+    if (!ok) notice('The brand fonts (Jost, EB Garamond) didn\u2019t load, so text in the art uses fallback fonts. Check your connection and reload before exporting.');
+    return ok;
+  }).catch(() => {
+    fontsOk = false;
+    notice('The brand fonts (Jost, EB Garamond) didn\u2019t load, so text in the art uses fallback fonts. Check your connection and reload before exporting.');
+    return false;
+  });
+}
 
 // ══════════════════════════════════════════════════
 // UNSPLASH API — proxied through Cloudflare Pages Function
 // ══════════════════════════════════════════════════
 const UNSPLASH_PROXY = '/api/unsplash';
+const UTM = '?utm_source=wonder_cabinet_art_builder&utm_medium=referral';
 
 // ══════════════════════════════════════════════════
 // TABS
 // ══════════════════════════════════════════════════
 function switchTab(tab) {
-  document.querySelectorAll('.picker-tab').forEach(t => t.classList.remove('active'));
-  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-  document.querySelector('[onclick*="switchTab(\'' + tab + '\')"]').classList.add('active');
-  document.getElementById('tab-' + tab).classList.add('active');
+  document.querySelectorAll('.picker-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.toggle('active', t.id === 'tab-' + tab));
 }
 
 // ══════════════════════════════════════════════════
@@ -350,8 +641,6 @@ async function searchUnsplash() {
   document.getElementById('searchBtn').disabled = true;
   document.getElementById('searchStatus').textContent = 'Searching...';
   document.getElementById('searchResults').innerHTML = '';
-  const emptyEl = document.getElementById('searchEmpty');
-  if (emptyEl) emptyEl.style.display = 'none';
 
   await fetchUnsplashPage(query, 1);
   document.getElementById('searchBtn').disabled = false;
@@ -363,42 +652,40 @@ async function loadMore() {
 }
 
 async function fetchUnsplashPage(query, page) {
+  const status = document.getElementById('searchStatus');
   try {
     const resp = await fetch(
       UNSPLASH_PROXY + '?action=search&query=' + encodeURIComponent(query) +
       '&page=' + page + '&per_page=20&orientation=squarish'
     );
     if (!resp.ok) {
-      const err = await resp.text();
-      document.getElementById('searchStatus').textContent = 'Error: ' + resp.status;
+      status.textContent = 'Search failed (error ' + resp.status + ').' +
+        (resp.status === 404 ? ' Unsplash search needs the Pages Function; run the site with wrangler pages dev.' : '');
       return;
     }
     const data = await resp.json();
     const total = data.total;
-    document.getElementById('searchStatus').textContent =
+    status.textContent =
       total + ' results for "' + query + '"' + (total > page * 20 ? ' \u2014 showing ' + Math.min(page * 20, total) : '');
 
     const container = document.getElementById('searchResults');
-    data.results.forEach(photo => {
-      const card = createUnsplashCard(photo);
-      container.appendChild(card);
-    });
+    data.results.forEach(photo => container.appendChild(createUnsplashCard(photo)));
 
     document.getElementById('loadMoreBtn').style.display = (total > page * 20) ? 'block' : 'none';
   } catch (e) {
-    document.getElementById('searchStatus').textContent = 'Network error: ' + e.message;
+    status.textContent = 'Network error: ' + e.message;
   }
 }
 
 function createUnsplashCard(photo) {
   const card = document.createElement('div');
   card.className = 'source-card';
-  card.style.cursor = 'pointer';
 
   const img = document.createElement('img');
-  img.src = photo.urls.small;
+  img.crossOrigin = 'anonymous';
   img.alt = photo.alt_description || photo.description || 'Unsplash photo';
   img.loading = 'lazy';
+  img.src = photo.urls.small;
   card.appendChild(img);
 
   const code = document.createElement('div');
@@ -410,37 +697,32 @@ function createUnsplashCard(photo) {
   credit.className = 'credit';
   credit.appendChild(document.createTextNode('Photo by '));
   const nameLink = document.createElement('a');
-  nameLink.href = photo.user.links.html + '?utm_source=wonder_cabinet_art_builder&utm_medium=referral';
+  nameLink.href = photo.user.links.html + UTM;
   nameLink.target = '_blank';
+  nameLink.rel = 'noopener';
   nameLink.textContent = photo.user.name;
   nameLink.onclick = e => e.stopPropagation();
   credit.appendChild(nameLink);
   credit.appendChild(document.createTextNode(' on '));
   const unsplashLink = document.createElement('a');
-  unsplashLink.href = 'https://unsplash.com/?utm_source=wonder_cabinet_art_builder&utm_medium=referral';
+  unsplashLink.href = 'https://unsplash.com/' + UTM;
   unsplashLink.target = '_blank';
+  unsplashLink.rel = 'noopener';
   unsplashLink.textContent = 'Unsplash';
   unsplashLink.onclick = e => e.stopPropagation();
   credit.appendChild(unsplashLink);
   card.appendChild(credit);
 
-  // Click to add to pool
   card.onclick = () => addUnsplashToPool(photo);
-
-  // Right-click for lightbox
   card.addEventListener('contextmenu', e => {
     e.preventDefault();
-    document.getElementById('lightbox-img').src = photo.urls.regular;
-    document.getElementById('lightbox-caption').textContent =
-      'Photo by ' + photo.user.name + ' on Unsplash';
-    document.getElementById('lightbox').classList.add('active');
+    openLightbox(photo.urls.regular, 'Photo by ' + photo.user.name + ' on Unsplash');
   });
 
   return card;
 }
 
 function addUnsplashToPool(photo) {
-  // Check if already in pool
   if (sourcePool.find(s => s.unsplashId === photo.id)) return;
 
   const entry = {
@@ -448,27 +730,34 @@ function addUnsplashToPool(photo) {
     unsplashId: photo.id,
     thumbUrl: photo.urls.small,
     fullUrl: photo.urls.full,
-    code: 'U' + (sourcePool.filter(s => s.source === 'unsplash').length + 1),
+    code: 'U' + (sourcePool.filter(s => /^U\d/.test(s.code)).length + 1),
     credit: 'Photo by ' + photo.user.name + ' on Unsplash',
     photographer: photo.user.name,
-    photographerUrl: photo.user.links.html + '?utm_source=wonder_cabinet_art_builder&utm_medium=referral',
-    url: photo.links.html + '?utm_source=wonder_cabinet_art_builder&utm_medium=referral',
+    photographerUrl: photo.user.links.html + UTM,
+    url: photo.links.html + UTM,
     source: 'unsplash',
     downloadLocation: photo.links.download_location,
-    img: null
+    img: null,
+    lowRes: false
   };
 
-  // Preload full image for canvas use
-  const img = new Image();
-  img.crossOrigin = 'anonymous';
-  img.onload = () => { entry.img = img; };
-  img.src = photo.urls.full;
-
-  // Also load thumb immediately
-  const thumb = new Image();
-  thumb.crossOrigin = 'anonymous';
-  thumb.onload = () => { if (!entry.img) entry.img = thumb; };
-  thumb.src = photo.urls.small;
+  // The thumbnail arrives first so the image can be placed right away; the full-size image replaces
+  // it (in the pool and in any slot already using it) when it lands.
+  const thumb = loadImage(photo.urls.small).then(img => { if (!entry.img) { entry.img = img; entry.lowRes = true; } return img; });
+  const full = loadImage(photo.urls.full).then(img => {
+    entry.img = img;
+    entry.lowRes = false;
+    upgradeSlots(entry);
+    return img;
+  }).catch(err => {
+    notice('The full-size Unsplash image for ' + entry.code + ' (' + entry.photographer + ') failed to load; art using it would export at low resolution. Remove it and add it again.');
+    renderPool();
+    throw err;
+  });
+  entry.ready = Promise.any([full, thumb]).catch(() => {
+    throw new Error('Couldn\u2019t load the Unsplash image for ' + entry.code + '.');
+  });
+  entry.ready.catch(() => {});  // reported when the image is placed
 
   sourcePool.push(entry);
   renderPool();
@@ -477,6 +766,14 @@ function addUnsplashToPool(photo) {
   if (photo.links.download_location) {
     fetch(UNSPLASH_PROXY + '?action=track-download&url=' + encodeURIComponent(photo.links.download_location)).catch(() => {});
   }
+}
+
+// Point any slot showing this source at its (now full-size) image.
+function upgradeSlots(entry) {
+  ['tl', 'bl', 'right'].forEach(k => {
+    if (slotData[k].sourceId === entry.id) { slotData[k].img = entry.img; renderSlot(k); }
+  });
+  updateButtons();
 }
 
 // ══════════════════════════════════════════════════
@@ -495,12 +792,18 @@ async function handleFiles(files) {
   for (const file of Array.from(files)) {
     if (!file.type.startsWith('image/')) continue;
 
-    // Read file as data URL
-    const dataUrl = await new Promise(resolve => {
-      const reader = new FileReader();
-      reader.onload = e => resolve(e.target.result);
-      reader.readAsDataURL(file);
-    });
+    let dataUrl;
+    try {
+      dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = e => resolve(e.target.result);
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(file);
+      });
+    } catch (e) {
+      notice('Couldn\u2019t read ' + file.name + ': ' + (e && e.message ? e.message : 'unknown error'));
+      continue;
+    }
 
     // 1. Check filename for composite pattern FIRST (composite-A+B.jpg) — must run before the
     //    greedy Unsplash regex, which would otherwise swallow `composite-X-...-unsplash.jpg`
@@ -526,14 +829,7 @@ async function handleFiles(files) {
 
     // 3. Try to extract credit metadata from EXIF/IPTC/XMP (also detects editor tool)
     const meta = await extractImageCredits(file);
-
-    if (meta.photographer) {
-      // Auto-detected credits from metadata — pre-fill and confirm
-      showCreditForm(dataUrl, file.name, meta);
-    } else {
-      // No metadata photographer — show form (with editor warning if applicable)
-      showCreditForm(dataUrl, file.name, meta.editorTool ? meta : undefined);
-    }
+    showCreditForm(dataUrl, file.name, (meta.photographer || meta.editorTool) ? meta : undefined);
   }
 }
 
@@ -543,13 +839,9 @@ async function extractImageCredits(file) {
     if (typeof exifr === 'undefined') return meta;
 
     const data = await exifr.parse(file, {
-      // EXIF tags
       exif: { pick: ['Artist', 'Copyright', 'ImageDescription', 'Software'] },
-      // IPTC tags
       iptc: { pick: ['Byline', 'Credit', 'Source', 'CopyrightNotice', 'Caption'] },
-      // XMP tags
       xmp: { pick: ['creator', 'rights', 'credit', 'source', 'description', 'CreatorTool'] },
-      // Also try these common namespaces
       icc: false,
       jfif: false,
       ihdr: false
@@ -565,44 +857,27 @@ async function extractImageCredits(file) {
         const head = await file.slice(0, 65536).text();
         const m = head.match(/Adobe Photoshop[^\s"<]*|Pixelmator[^\s"<]*|Affinity (Photo|Designer)[^\s"<]*|Adobe Lightroom[^\s"<]*|GIMP[^\s"<]*|Procreate[^\s"<]*/);
         if (m) meta.editorTool = m[0];
-      } catch (_) { /* binary slice fallback failed — non-fatal */ }
+      } catch (_) { /* binary slice fallback failed \u2014 non-fatal */ }
     }
 
     if (!data) return meta;
 
-    // Extract photographer name (priority order)
     meta.photographer =
-      data.Byline ||           // IPTC By-line
-      data.Artist ||           // EXIF Artist
-      data.Credit ||           // IPTC Credit
-      data.creator ||          // XMP dc:creator
-      (Array.isArray(data.creator) ? data.creator[0] : null) ||
-      null;
+      data.Byline || data.Artist || data.Credit || data.creator ||
+      (Array.isArray(data.creator) ? data.creator[0] : null) || null;
 
-    // Extract copyright
-    meta.copyright =
-      data.CopyrightNotice ||  // IPTC
-      data.Copyright ||        // EXIF
-      data.rights ||           // XMP
-      null;
+    meta.copyright = data.CopyrightNotice || data.Copyright || data.rights || null;
 
-    // Try to detect source
     const allText = JSON.stringify(data).toLowerCase();
-    if (allText.includes('unsplash')) {
-      meta.source = 'unsplash';
-    } else if (allText.includes('getty')) {
-      meta.source = 'Getty Images';
-    } else if (allText.includes('shutterstock')) {
-      meta.source = 'Shutterstock';
-    }
+    if (allText.includes('unsplash')) meta.source = 'unsplash';
+    else if (allText.includes('getty')) meta.source = 'Getty Images';
+    else if (allText.includes('shutterstock')) meta.source = 'Shutterstock';
 
-    // Extract URL if present in description or source fields
     const urlMatch = (data.Source || data.source || data.ImageDescription || data.description || '')
       .toString().match(/https?:\/\/[^\s"]+/);
     if (urlMatch) meta.url = urlMatch[0];
-
   } catch (e) {
-    // Silently fail — metadata extraction is best-effort
+    // Metadata extraction is best-effort; the credit form still opens for manual entry.
     console.warn('EXIF parse error:', e);
   }
   return meta;
@@ -614,11 +889,7 @@ function parseUnsplashFilename(name) {
   if (!match) return null;
   const photographer = match[1].split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
   const photoId = match[2];
-  return {
-    photographer,
-    photoId,
-    url: 'https://unsplash.com/photos/' + photoId
-  };
+  return { photographer, photoId, url: 'https://unsplash.com/photos/' + photoId };
 }
 
 function parseCompositeFilename(name) {
@@ -637,6 +908,8 @@ function parseCompositeFilename(name) {
   return sources.length >= 2 ? sources : null;
 }
 
+const escAttr = s => (s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+
 function showCreditForm(dataUrl, filename, meta) {
   meta = meta || {};
   const area = document.getElementById('creditFormArea');
@@ -644,46 +917,45 @@ function showCreditForm(dataUrl, filename, meta) {
   form.className = 'credit-form';
 
   const thumbImg = document.createElement('img');
+  thumbImg.alt = '';
   thumbImg.src = dataUrl;
   thumbImg.style.cssText = 'width:60px;height:60px;object-fit:cover;border-radius:4px;float:left;margin-right:0.75rem;';
   form.appendChild(thumbImg);
 
-  let heading;
-  let metaHint = '';
+  let heading, metaHint = '';
   if (meta.isComposite) {
     heading = 'Composite detected: ' + filename;
-    metaHint = '<div style="font-size:0.6rem;color:#10a544;margin-bottom:0.4rem;">Parsed two Unsplash sources from filename \u2014 confirm credit below' +
-      (meta.editorTool ? ' (file saved through ' + meta.editorTool.split(/[\s,]/)[0].slice(0, 30) + ')' : '') + '</div>';
+    metaHint = '<p class="meta-hint">Parsed two Unsplash sources from filename \u2014 confirm credit below' +
+      (meta.editorTool ? ' (file saved through ' + escAttr(meta.editorTool.split(/[\s,]/)[0].slice(0, 30)) + ')' : '') + '</p>';
   } else if (meta.photographer) {
     heading = 'Credits detected for: ' + filename;
-    metaHint = '<div style="font-size:0.6rem;color:#10a544;margin-bottom:0.4rem;">Auto-detected from image metadata' +
-      (meta.copyright ? ' \u2014 ' + meta.copyright : '') + '</div>';
+    metaHint = '<p class="meta-hint">Auto-detected from image metadata' +
+      (meta.copyright ? ' \u2014 ' + escAttr(String(meta.copyright)) : '') + '</p>';
   } else if (meta.editorTool) {
     heading = 'Edited file: ' + filename;
-    metaHint = '<div style="font-size:0.6rem;color:#e0a040;margin-bottom:0.4rem;">Saved through ' + meta.editorTool.slice(0, 60) + ' \u2014 if this combines multiple sources, choose Source: Other and enter the combined credit</div>';
+    metaHint = '<p class="meta-hint warn">Saved through ' + escAttr(meta.editorTool.slice(0, 60)) + ' \u2014 if this combines multiple sources, choose Source: Other and enter the combined credit</p>';
   } else {
     heading = 'Add credits for: ' + filename;
   }
 
-  // Determine default source selection
   const sourceVal = meta.source === 'unsplash' ? 'unsplash' : (meta.source ? 'other' : 'guest');
   const sourceLabel = meta.sourceLabel || '';
 
-  form.innerHTML +=
-    '<h4>' + heading + '</h4>' +
+  form.insertAdjacentHTML('beforeend',
+    '<h3>' + escAttr(heading) + '</h3>' +
     metaHint +
-    '<div class="form-row"><label>Photographer</label><input type="text" id="cf-photographer" placeholder="Name" value="' + (meta.photographer || '').replace(/"/g, '&quot;') + '"></div>' +
-    '<div class="form-row"><label>Source</label><select id="cf-source" onchange="toggleOtherSource(this)">' +
+    '<div class="form-row"><label>Photographer</label><input type="text" class="cf-photographer" aria-label="Photographer" placeholder="Name" value="' + escAttr(meta.photographer) + '"></div>' +
+    '<div class="form-row"><label>Source</label><select class="cf-source" aria-label="Source" onchange="toggleOtherSource(this)">' +
       '<option value="unsplash"' + (sourceVal === 'unsplash' ? ' selected' : '') + '>Unsplash</option>' +
       '<option value="guest"' + (sourceVal === 'guest' ? ' selected' : '') + '>Via guest</option>' +
       '<option value="other"' + (sourceVal === 'other' ? ' selected' : '') + '>Other</option>' +
     '</select></div>' +
-    '<div class="form-row" id="cf-other-row" style="display:' + (sourceVal === 'other' ? 'flex' : 'none') + ';"><label>Other source</label><input type="text" id="cf-source-label" placeholder="e.g. Allen Institute" value="' + sourceLabel.replace(/"/g, '&quot;') + '"></div>' +
-    '<div class="form-row"><label>URL (optional)</label><input type="text" id="cf-url" placeholder="https://..." value="' + (meta.url || '').replace(/"/g, '&quot;') + '"></div>' +
+    '<div class="form-row cf-other-row" style="display:' + (sourceVal === 'other' ? 'flex' : 'none') + ';"><label>Other source</label><input type="text" class="cf-source-label" aria-label="Other source" placeholder="e.g. Allen Institute" value="' + escAttr(sourceLabel) + '"></div>' +
+    '<div class="form-row"><label>URL (optional)</label><input type="text" class="cf-url" aria-label="Source URL" placeholder="https://..." value="' + escAttr(meta.url) + '"></div>' +
     '<div class="form-actions">' +
-      '<button class="btn-add" onclick="submitCreditForm(this)">Add to pool</button>' +
-      '<button class="btn-cancel" onclick="this.closest(\'.credit-form\').remove()">Cancel</button>' +
-    '</div>';
+      '<button class="btn-primary" onclick="submitCreditForm(this)">Add to pool</button>' +
+      '<button class="btn" onclick="this.closest(\'.credit-form\').remove()">Cancel</button>' +
+    '</div>');
 
   form._dataUrl = dataUrl;
   form._filename = filename;
@@ -691,16 +963,16 @@ function showCreditForm(dataUrl, filename, meta) {
 }
 
 function toggleOtherSource(sel) {
-  const row = sel.closest('.credit-form').querySelector('#cf-other-row');
+  const row = sel.closest('.credit-form').querySelector('.cf-other-row');
   row.style.display = (sel.value === 'other') ? 'flex' : 'none';
 }
 
 function submitCreditForm(btn) {
   const form = btn.closest('.credit-form');
-  const photographer = form.querySelector('#cf-photographer').value.trim() || 'Unknown';
-  const sourceType = form.querySelector('#cf-source').value;
-  const sourceLabel = form.querySelector('#cf-source-label').value.trim();
-  const url = form.querySelector('#cf-url').value.trim();
+  const photographer = form.querySelector('.cf-photographer').value.trim() || 'Unknown';
+  const sourceType = form.querySelector('.cf-source').value;
+  const sourceLabel = form.querySelector('.cf-source-label').value.trim();
+  const url = form.querySelector('.cf-url').value.trim();
 
   addUploadToPool(form._dataUrl, form._filename, photographer, url, sourceType, sourceLabel);
   form.remove();
@@ -718,7 +990,7 @@ function addUploadToPool(dataUrl, filename, photographer, url, sourceType, sourc
     id: nextSourceId++,
     thumbUrl: dataUrl,
     fullUrl: dataUrl,
-    code: 'L' + (sourcePool.filter(s => s.source !== 'unsplash').length + 1),
+    code: 'L' + (sourcePool.filter(s => /^L\d/.test(s.code)).length + 1),
     credit: creditText,
     photographer: photographer,
     photographerUrl: isUnsplash && url ? url.replace(/\/photos\/.*/, '/@' + photographer.toLowerCase().replace(/\s+/g, '')) : null,
@@ -730,9 +1002,12 @@ function addUploadToPool(dataUrl, filename, photographer, url, sourceType, sourc
     img: null
   };
 
-  const img = new Image();
-  img.onload = () => { entry.img = img; };
-  img.src = dataUrl;
+  entry.ready = loadImage(dataUrl).then(img => { entry.img = img; return img; }).catch(() => {
+    notice('Couldn\u2019t open ' + filename + ' as an image. It may be corrupt or in a format this browser can\u2019t display.');
+    removeFromPool(entry.id);
+    throw new Error('Couldn\u2019t open ' + filename + '.');
+  });
+  entry.ready.catch(() => {});  // already reported above
 
   sourcePool.push(entry);
   renderPool();
@@ -761,8 +1036,9 @@ function renderPool() {
     card.onclick = () => placeFromPool(entry.id);
 
     const img = document.createElement('img');
-    img.src = entry.thumbUrl;
+    img.crossOrigin = 'anonymous';
     img.alt = entry.code;
+    img.src = entry.thumbUrl;
     card.appendChild(img);
 
     const code = document.createElement('div');
@@ -777,13 +1053,15 @@ function renderPool() {
       const nameLink = document.createElement('a');
       nameLink.href = entry.photographerUrl || entry.url;
       nameLink.target = '_blank';
+      nameLink.rel = 'noopener';
       nameLink.textContent = entry.photographer;
       nameLink.onclick = e => e.stopPropagation();
       credit.appendChild(nameLink);
       credit.appendChild(document.createTextNode(' on '));
       const unsplashLink = document.createElement('a');
-      unsplashLink.href = 'https://unsplash.com/?utm_source=wonder_cabinet_art_builder&utm_medium=referral';
+      unsplashLink.href = 'https://unsplash.com/' + UTM;
       unsplashLink.target = '_blank';
+      unsplashLink.rel = 'noopener';
       unsplashLink.textContent = 'Unsplash';
       unsplashLink.onclick = e => e.stopPropagation();
       credit.appendChild(unsplashLink);
@@ -791,6 +1069,7 @@ function renderPool() {
       const a = document.createElement('a');
       a.href = entry.url;
       a.target = '_blank';
+      a.rel = 'noopener';
       a.textContent = entry.credit;
       a.onclick = e => e.stopPropagation();
       credit.appendChild(a);
@@ -799,20 +1078,16 @@ function renderPool() {
     }
     card.appendChild(credit);
 
-    // Remove button
     const x = document.createElement('button');
     x.className = 'card-remove';
-    x.textContent = '\u00d7';
+    x.textContent = '\u00D7';
+    x.title = 'Remove ' + entry.code;
     x.onclick = e => { e.stopPropagation(); removeFromPool(entry.id); };
     card.appendChild(x);
 
-    // Right-click lightbox
     card.addEventListener('contextmenu', e => {
       e.preventDefault();
-      document.getElementById('lightbox-img').src = entry.fullUrl || entry.thumbUrl;
-      document.getElementById('lightbox-caption').textContent =
-        entry.code + ' \u2014 ' + entry.credit;
-      document.getElementById('lightbox').classList.add('active');
+      openLightbox(entry.fullUrl || entry.thumbUrl, entry.code + ' \u2014 ' + entry.credit);
     });
 
     container.appendChild(card);
@@ -822,8 +1097,7 @@ function renderPool() {
 function removeFromPool(id) {
   const idx = sourcePool.findIndex(s => s.id === id);
   if (idx !== -1) sourcePool.splice(idx, 1);
-  // Clear any slots using this source
-  ['tl','bl','right'].forEach(k => {
+  ['tl', 'bl', 'right'].forEach(k => {
     if (slotData[k].sourceId === id) clearSlot(k);
   });
   renderPool();
@@ -850,7 +1124,11 @@ function setActiveSlot(slot) {
   document.getElementById('btn-' + slot).classList.add('active');
   document.querySelectorAll('.slot').forEach(s => s.classList.remove('active-target'));
   document.getElementById('slot-' + slot).classList.add('active-target');
-  const z = Math.round(slotData[slot].zoom * 100);
+  if (!isQuoteFormat(activeFormat)) syncZoomSlider(slotData[slot].zoom);
+}
+
+function syncZoomSlider(zoom) {
+  const z = Math.round(zoom * 100);
   document.getElementById('zoomSlider').value = z;
   document.getElementById('zoomVal').textContent = z + '%';
 }
@@ -858,33 +1136,32 @@ function setActiveSlot(slot) {
 function placeFromPool(id) {
   const entry = sourcePool.find(s => s.id === id);
   if (!entry) return;
+  const slot = activeSlot;
 
-  const waitForImage = () => {
-    if (!entry.img) { setTimeout(waitForImage, 100); return; }
-    const sd = slotData[activeSlot];
+  entry.ready.then(() => {
+    if (!sourcePool.includes(entry)) return;  // removed while loading
+    const sd = slotData[slot];
     sd.img = entry.img;
     sd.code = entry.code;
     sd.credit = entry.credit;
     sd.url = entry.url;
     sd.sourceId = entry.id;
     sd.panX = 0.5;
-    sd.panY = (activeSlot === 'right') ? 0.0 : 0.5;
+    sd.panY = (slot === 'right') ? 0.0 : 0.5;
     sd.zoom = 1.0;
-    document.getElementById('zoomSlider').value = 100;
-    document.getElementById('zoomVal').textContent = '100%';
-    renderSlot(activeSlot);
+    if (!isQuoteFormat(activeFormat)) syncZoomSlider(1);
+    renderSlot(slot);
     updateCredits();
     updateButtons();
     // Auto-advance
-    if (activeSlot === 'tl' && !slotData.bl.img) setActiveSlot('bl');
-    else if (activeSlot === 'bl' && !slotData.right.img) setActiveSlot('right');
-    else if (activeSlot === 'right' && !slotData.tl.img) setActiveSlot('tl');
-  };
-  waitForImage();
+    if (slot === 'tl' && !slotData.bl.img) setActiveSlot('bl');
+    else if (slot === 'bl' && !slotData.right.img) setActiveSlot('right');
+    else if (slot === 'right' && !slotData.tl.img) setActiveSlot('tl');
+  }).catch(err => notice(err.message));
 }
 
 // ══════════════════════════════════════════════════
-// CANVAS RENDERING
+// CANVAS RENDERING — panel previews
 // ══════════════════════════════════════════════════
 function renderSlot(slotKey) {
   const sd = slotData[slotKey];
@@ -901,10 +1178,12 @@ function renderSlot(slotKey) {
 
   const rect = slotEl.getBoundingClientRect();
   const dpr = window.devicePixelRatio || 1;
-  cvs.width = rect.width * dpr;
-  cvs.height = rect.height * dpr;
+  cvs.width = Math.max(1, rect.width * dpr);
+  cvs.height = Math.max(1, rect.height * dpr);
   const ctx = cvs.getContext('2d');
   drawCover(ctx, sd.img, cvs.width, cvs.height, sd.panX, sd.panY, sd.zoom, 0, 0);
+  schedulePreview();
+  scheduleExportPane();
 }
 
 function drawCover(ctx, img, cw, ch, panX, panY, zoom, offX, offY) {
@@ -935,6 +1214,7 @@ function setupDrag(slotKey, cvs) {
   window.addEventListener('mousemove', e => {
     if (!dragging) return;
     const sd = slotData[slotKey];
+    if (!sd.img) { dragging = false; return; }
     const rect = cvs.getBoundingClientRect();
     const scale = Math.max(rect.width / sd.img.naturalWidth, rect.height / sd.img.naturalHeight) * sd.zoom;
     const overX = sd.img.naturalWidth * scale - rect.width;
@@ -948,17 +1228,23 @@ function setupDrag(slotKey, cvs) {
 }
 
 function onZoom() {
-  const val = parseInt(document.getElementById('zoomSlider').value);
-  document.getElementById('zoomVal').textContent = val + '%';
-  slotData[activeSlot].zoom = val / 100;
+  const v = parseInt(document.getElementById('zoomSlider').value, 10);
+  document.getElementById('zoomVal').textContent = v + '%';
+  if (isQuoteFormat(activeFormat)) { activeCard.zoom = v / 100; updateButtons(); return; }
+  slotData[activeSlot].zoom = v / 100;
   renderSlot(activeSlot);
 }
 
 function resetPosition() {
+  if (isQuoteFormat(activeFormat)) {
+    activeCard.panX = 0.5; activeCard.panY = 0.25; activeCard.zoom = 1.0;
+    syncZoomSlider(1);
+    updateButtons();
+    return;
+  }
   const sd = slotData[activeSlot];
   sd.panX = 0.5; sd.panY = (activeSlot === 'right') ? 0.0 : 0.5; sd.zoom = 1.0;
-  document.getElementById('zoomSlider').value = 100;
-  document.getElementById('zoomVal').textContent = '100%';
+  syncZoomSlider(1);
   renderSlot(activeSlot);
 }
 
@@ -967,39 +1253,41 @@ function resetPosition() {
 // ══════════════════════════════════════════════════
 function updateCredits() {
   const lines = [];
-  [['tl','Top left'],['bl','Bottom left'],['right','Right']].forEach(([key, label]) => {
+  [['tl', 'Top left'], ['bl', 'Bottom left'], ['right', 'Right']].forEach(([key, label]) => {
     const s = slotData[key];
-    if (s.img) {
-      const poolEntry = sourcePool.find(p => p.id === s.sourceId);
-      const el = document.createElement('span');
-      el.className = 'credit-line';
-      const strong = document.createElement('strong');
-      strong.textContent = label + ' (' + (s.code || '?') + '): ';
-      el.appendChild(strong);
-      if (poolEntry && poolEntry.source === 'unsplash') {
-        el.appendChild(document.createTextNode('Photo by '));
-        const nameLink = document.createElement('a');
-        nameLink.href = poolEntry.photographerUrl || s.url;
-        nameLink.target = '_blank';
-        nameLink.textContent = poolEntry.photographer;
-        el.appendChild(nameLink);
-        el.appendChild(document.createTextNode(' on '));
-        const unsplashLink = document.createElement('a');
-        unsplashLink.href = 'https://unsplash.com/?utm_source=wonder_cabinet_art_builder&utm_medium=referral';
-        unsplashLink.target = '_blank';
-        unsplashLink.textContent = 'Unsplash';
-        el.appendChild(unsplashLink);
-      } else if (s.url) {
-        const a = document.createElement('a');
-        a.href = s.url;
-        a.target = '_blank';
-        a.textContent = s.credit;
-        el.appendChild(a);
-      } else {
-        el.appendChild(document.createTextNode(s.credit || 'No credit'));
-      }
-      lines.push(el);
+    if (!s.img) return;
+    const poolEntry = sourcePool.find(p => p.id === s.sourceId);
+    const el = document.createElement('span');
+    el.className = 'credit-line';
+    const strong = document.createElement('strong');
+    strong.textContent = label + ' (' + (s.code || '?') + '): ';
+    el.appendChild(strong);
+    if (poolEntry && poolEntry.source === 'unsplash') {
+      el.appendChild(document.createTextNode('Photo by '));
+      const nameLink = document.createElement('a');
+      nameLink.href = poolEntry.photographerUrl || s.url;
+      nameLink.target = '_blank';
+      nameLink.rel = 'noopener';
+      nameLink.textContent = poolEntry.photographer;
+      el.appendChild(nameLink);
+      el.appendChild(document.createTextNode(' on '));
+      const unsplashLink = document.createElement('a');
+      unsplashLink.href = 'https://unsplash.com/' + UTM;
+      unsplashLink.target = '_blank';
+      unsplashLink.rel = 'noopener';
+      unsplashLink.textContent = 'Unsplash';
+      el.appendChild(unsplashLink);
+    } else if (s.url) {
+      const a = document.createElement('a');
+      a.href = s.url;
+      a.target = '_blank';
+      a.rel = 'noopener';
+      a.textContent = s.credit;
+      el.appendChild(a);
+    } else {
+      el.appendChild(document.createTextNode(s.credit || 'No credit'));
     }
+    lines.push(el);
   });
   const container = document.getElementById('creditLines');
   container.innerHTML = '';
@@ -1014,107 +1302,952 @@ function updateCredits() {
   updateCreditsPreview();
 }
 
+// Refreshes every control that depends on what's filled in, then redraws the previews.
 function updateButtons() {
-  const allFilled = slotData.tl.img && slotData.bl.img && slotData.right.img;
-  document.getElementById('exportBtn').disabled = !allFilled;
-  document.getElementById('exportCreditsBtn').disabled = !allFilled;
+  const allFilled = !!(slotData.tl.img && slotData.bl.img && slotData.right.img);
+  const ready = assetList().filter(assetReady).length;
+  const allBtn = document.getElementById('exportAllBtn');
+  allBtn.disabled = ready === 0;
+  allBtn.textContent = 'Export all ready (' + ready + ')';
+  document.getElementById('exportCreditsBtn').disabled = !generateCreditsMarkdown();
   document.getElementById('saveBtn').disabled = !allFilled;
+  updateCreditsPreview();
+  schedulePreview();
+  scheduleExportPane();
 }
 
 // ══════════════════════════════════════════════════
-// EXPORT — Full-resolution canvas
+// TEXT — typography, wrapping, fitting
 // ══════════════════════════════════════════════════
-function exportImage() {
-  const status = document.getElementById('exportStatus');
-  status.textContent = 'Compositing at 3000\u00d73000\u2026';
+const jost = w => size => w + ' ' + size + 'px Jost, Futura, system-ui, sans-serif';
+const garamond = size => '400 ' + size + 'px "EB Garamond", Garamond, Georgia, serif';
+function setTracking(ctx, px) { if ('letterSpacing' in ctx) ctx.letterSpacing = px + 'px'; }
 
-  requestAnimationFrame(() => {
-    try {
-      const cvs = document.createElement('canvas');
-      cvs.width = CANVAS_SIZE; cvs.height = CANVAS_SIZE;
-      const ctx = cvs.getContext('2d');
+// Typographic cleanup for pasted transcript text: curly quotes and apostrophes, one house dash style
+// (a spaced em dash, bound to the word before it so a line never starts with one), and a
+// non-breaking space before the last word so no line ends on one word.
+function smartQuotes(text) {
+  let s = String(text || '');
+  s = s.replace(/\s*--+\s*/g, '\u00A0\u2014 ');                                  // -- → em dash
+  s = s.replace(/(\S)\s+[\u2013\u2014-]\s+(?=\S)/g, '$1\u00A0\u2014 ');          // spaced -, – or —
+  s = s.replace(/([A-Za-z\u00C0-\u024F])\u2014(?=[A-Za-z\u00C0-\u024F])/g, '$1\u00A0\u2014 '); // word—word
+  s = s.replace(/(^|[\s(\[\u2014\u2013-])"/g, '$1\u201C').replace(/"/g, '\u201D');
+  s = s.replace(/(^|[\s(\[\u2014\u2013\u201C-])'(?=\S)/g, '$1\u2018').replace(/'/g, '\u2019');
+  // Apostrophes that open a word ('til, '90s) are elisions, not opening quotes.
+  s = s.replace(/\u2018(?=(?:tis|til|twas|em|cause|n|\d\ds?)\b)/gi, '\u2019');
+  s = s.replace(/[ \t]+$/gm, '');
+  return s.split('\n').map(line => line.replace(/ (\S+)$/, '\u00A0$1')).join('\n');
+}
 
-      ctx.fillStyle = GREEN;
-      ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+// Strips one layer of quote marks that wrap the whole quote (pasted quotes often arrive quoted).
+function stripWrappingQuotes(q) {
+  let s = q.trim();
+  while (/^["\u201C\u201D\u2018\u2019']/.test(s) && /["\u201C\u201D\u2018\u2019']$/.test(s) && s.length > 1) s = s.slice(1, -1).trim();
+  return s;
+}
 
-      const panels = [
-        { key: 'tl', x: TL_X, y: TL_Y, w: IMG_W, h: LEFT_H },
-        { key: 'bl', x: BL_X, y: BL_Y, w: IMG_W, h: LEFT_H },
-        { key: 'right', x: RT_X, y: RT_Y, w: IMG_W, h: RIGHT_H }
-      ];
-
-      panels.forEach(p => {
-        const sd = slotData[p.key];
-        ctx.fillStyle = BLACK;
-        ctx.fillRect(p.x, p.y, p.w + 2*PAD, p.h + 2*PAD);
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(p.x + PAD, p.y + PAD, p.w, p.h);
-        ctx.clip();
-        drawCover(ctx, sd.img, p.w, p.h, sd.panX, sd.panY, sd.zoom, p.x + PAD, p.y + PAD);
-        ctx.restore();
-      });
-
-      const quality = parseInt(document.getElementById('qualitySlider').value) / 100;
-      cvs.toBlob(blob => {
-        if (!blob) { status.textContent = 'Export failed (CORS issue — try uploading images instead of using Unsplash URLs directly)'; return; }
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = document.getElementById('exportName').value || 'episode-art.jpg';
-        a.click();
-        URL.revokeObjectURL(a.href);
-        status.textContent = 'Exported! (' + (blob.size / 1024 / 1024).toFixed(1) + ' MB)';
-      }, 'image/jpeg', quality);
-    } catch (err) {
-      status.textContent = 'Export failed: ' + err.message;
+// Greedy wrap. Splits only on ordinary spaces, so a non-breaking space keeps two words together.
+function wrapLines(ctx, text, maxW) {
+  const lines = [];
+  for (const para of text.split(/\n/)) {
+    let line = '';
+    for (const word of para.split(/[ \t]+/).filter(Boolean)) {
+      const test = line ? line + ' ' + word : word;
+      if (line && ctx.measureText(test).width > maxW) { lines.push(line); line = word; }
+      else line = test;
     }
+    if (line) lines.push(line);
+  }
+  return lines;
+}
+
+// Balanced rag: the narrowest width that keeps the greedy line count, so lines come out even.
+function balancedLines(ctx, text, maxW) {
+  const greedy = wrapLines(ctx, text, maxW);
+  if (greedy.length < 2) return greedy;
+  let lo = maxW * 0.4, hi = maxW;
+  for (let i = 0; i < 14; i++) {
+    const mid = (lo + hi) / 2;
+    if (wrapLines(ctx, text, mid).length <= greedy.length) hi = mid; else lo = mid;
+  }
+  return wrapLines(ctx, text, hi);
+}
+
+// Shrinks the quote until its balanced lines fit maxW × maxH (or hits min). Leaves ctx.font set.
+function fitQuote(ctx, text, maxW, maxH, lh, start, min) {
+  let size = start, lines;
+  for (;;) {
+    ctx.font = garamond(size);
+    lines = wrapLines(ctx, text, maxW);
+    const fits = lines.length * size * lh <= maxH && lines.every(l => ctx.measureText(l).width <= maxW);
+    if (fits || size <= min) break;
+    size = Math.max(min, Math.floor(size * 0.94));
+  }
+  ctx.font = garamond(size);
+  return { size, lines: balancedLines(ctx, text, maxW) };
+}
+
+// Single line: the largest size <= start whose width fits maxW. Leaves ctx.font set.
+function fitLine(ctx, text, fontFor, maxW, start) {
+  // Tracking is a fixed px amount, so width isn't proportional to size: re-measure until it fits.
+  let size = start;
+  ctx.font = fontFor(size);
+  for (let w = ctx.measureText(text).width; w > maxW && size > 4; w = ctx.measureText(text).width) {
+    size = Math.max(4, Math.floor(size * Math.min(0.97, maxW / w)));
+    ctx.font = fontFor(size);
+  }
+  return size;
+}
+
+// Guest name on the social plate: one line if it stays near full size; otherwise the most balanced
+// two-line break (at spaces or after hyphens), choosing whichever split allows the largest type,
+// and three lines for very long names.
+function fitName(ctx, text, maxW, start) {
+  const one = fitLine(ctx, text, jost(700), maxW, start);
+  if (one >= start * 0.75) return { size: one, lines: [text] };
+  const tokens = text.split(/(?<=-)|\s+/).filter(Boolean);
+  const join = toks => toks.reduce((s, tok) => s ? s + (s.endsWith('-') ? '' : ' ') + tok : tok, '');
+  let best = { size: one, lines: [text] };
+  const consider = lines => {
+    const size = Math.min(...lines.map(l => fitLine(ctx, l, jost(700), maxW, start)));
+    if (size > best.size) best = { size, lines };
+  };
+  for (let i = 1; i < tokens.length; i++) consider([join(tokens.slice(0, i)), join(tokens.slice(i))]);
+  if (best.size < start * 0.6) {
+    for (let i = 1; i < tokens.length; i++)
+      for (let j = i + 1; j < tokens.length; j++)
+        consider([join(tokens.slice(0, i)), join(tokens.slice(i, j)), join(tokens.slice(j))]);
+  }
+  ctx.font = jost(700)(best.size);
+  return best;
+}
+
+// ══════════════════════════════════════════════════
+// RENDER CACHES — blurred covers and quote-card tuning
+// ══════════════════════════════════════════════════
+// Canvas filters are missing in some browsers (older Safari ignores ctx.filter silently), so detect
+// support once and fall back to a downscale-then-upscale blur.
+const CANVAS_FILTER_OK = (() => {
+  try {
+    const x = document.createElement('canvas').getContext('2d');
+    x.filter = 'blur(2px)';
+    return x.filter === 'blur(2px)';
+  } catch (_) { return false; }
+})();
+
+// Small canvases (previews, thumbnails) are cached; export-size ones are one-off and not kept.
+const CACHE_MAX_PX = 1600000, CACHE_BUDGET_PX = 24000000;
+const blurCache = new Map();
+let blurCachePx = 0;
+function cacheGet(key) {
+  const c = blurCache.get(key);
+  if (c) { blurCache.delete(key); blurCache.set(key, c); }  // most recently used goes last
+  return c;
+}
+function cachePut(key, c) {
+  const px = c.width * c.height;
+  if (px > CACHE_MAX_PX) return c;
+  blurCache.set(key, c);
+  blurCachePx += px;
+  for (const [k, old] of blurCache) {
+    if (blurCachePx <= CACHE_BUDGET_PX) break;
+    blurCache.delete(k);
+    blurCachePx -= old.width * old.height;
+  }
+  return c;
+}
+
+const tuneCache = new Map();
+function clearRenderCaches() { blurCache.clear(); blurCachePx = 0; tuneCache.clear(); }
+
+// Cover-draws the image, blurred, onto a canvas of exactly W×H device pixels (a filter blur is
+// measured in device pixels and ignores the context transform, so it's applied at final size).
+function blurredCover(src, W, H, blurPx) {
+  W = Math.max(1, Math.round(W)); H = Math.max(1, Math.round(H));
+  const key = ['cover', imgId(src.img), src.panX, src.panY, src.zoom, W, H, blurPx].join('|');
+  const hit = cacheGet(key);
+  if (hit) return hit;
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const x = c.getContext('2d');
+  const m = blurPx * 2;  // overdraw so blurred edges don't fade to transparent
+  if (CANVAS_FILTER_OK) {
+    x.filter = 'blur(' + blurPx + 'px)';
+    drawCover(x, src.img, W + 2 * m, H + 2 * m, src.panX, src.panY, src.zoom, -m, -m);
+  } else {
+    // Fallback: shrink so each pixel covers about half the blur radius, then scale back up smoothly.
+    const f = Math.max(2, blurPx / 2);
+    const s = document.createElement('canvas');
+    s.width = Math.max(1, Math.round(W / f)); s.height = Math.max(1, Math.round(H / f));
+    const sx = s.getContext('2d');
+    sx.imageSmoothingQuality = 'high';
+    drawCover(sx, src.img, s.width, s.height, src.panX, src.panY, src.zoom, 0, 0);
+    x.imageSmoothingEnabled = true;
+    x.imageSmoothingQuality = 'high';
+    x.drawImage(s, 0, 0, W, H);
+  }
+  return cachePut(key, c);
+}
+
+// A blurred copy of the photo whose alpha fades from 1 to 0 between fromX and toX (device px).
+function fadedBlur(src, W, H, blurPx, fromX, toX) {
+  W = Math.max(1, Math.round(W)); H = Math.max(1, Math.round(H));
+  const key = ['fade', imgId(src.img), src.panX, src.panY, src.zoom, W, H, blurPx, Math.round(fromX), Math.round(toX)].join('|');
+  const hit = cacheGet(key);
+  if (hit) return hit;
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const x = c.getContext('2d');
+  x.drawImage(blurredCover(src, W, H, blurPx), 0, 0);
+  const mask = x.createLinearGradient(fromX, 0, Math.max(fromX + 1, toX), 0);
+  mask.addColorStop(0, 'rgba(0,0,0,1)');
+  mask.addColorStop(1, 'rgba(0,0,0,0)');
+  x.globalCompositeOperation = 'destination-in';
+  x.fillStyle = mask;
+  x.fillRect(0, 0, W, H);
+  return cachePut(key, c);
+}
+
+const tintCache = {};
+function tinted(img, color) {
+  const key = img.src + color;
+  if (tintCache[key]) return tintCache[key];
+  const c = document.createElement('canvas');
+  c.width = img.naturalWidth; c.height = img.naturalHeight;
+  const x = c.getContext('2d');
+  x.drawImage(img, 0, 0);
+  x.globalCompositeOperation = 'source-in';
+  x.fillStyle = color;
+  x.fillRect(0, 0, c.width, c.height);
+  return (tintCache[key] = c);
+}
+
+// ── Contrast measurement ─────────────────────────
+function hexLum(hex) {
+  const n = parseInt(hex.replace('#', ''), 16);
+  return relLum((n >> 16) & 255, (n >> 8) & 255, n & 255);
+}
+function relLum(r, g, b) {
+  const f = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+  return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+}
+const ratio = (a, b) => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+
+// Contrast between an ink colour and the backdrop inside box (device px), as the 5th percentile
+// across sampled pixels, so a busy patch under one word counts but a single stray pixel doesn't.
+function measureContrast(ctx, box, inkHex) {
+  const x = Math.max(0, Math.floor(box.x)), y = Math.max(0, Math.floor(box.y));
+  const w = Math.min(ctx.canvas.width - x, Math.ceil(box.w)), h = Math.min(ctx.canvas.height - y, Math.ceil(box.h));
+  if (w < 1 || h < 1) return Infinity;
+  const data = ctx.getImageData(x, y, w, h).data;
+  const ink = hexLum(inkHex), vals = [];
+  const step = Math.max(1, Math.floor(Math.sqrt(w * h / 4000)));
+  for (let j = 0; j < h; j += step)
+    for (let i = 0; i < w; i += step) {
+      const p = (j * w + i) * 4;
+      vals.push(ratio(ink, relLum(data[p], data[p + 1], data[p + 2])));
+    }
+  vals.sort((a, b) => a - b);
+  return vals[Math.floor(vals.length * 0.05)];
+}
+
+// ══════════════════════════════════════════════════
+// LOGOS
+// ══════════════════════════════════════════════════
+function lockupHeight(w) { return w * (LOCKUP.cabH + LOCKUP.gap + LOCKUP.wordH); }
+function drawLockup(ctx, x, y, w, wordColor) {
+  const cabImg = brandImgs.cabinet, word = brandImgs.wordmark;
+  if (!imgReady(cabImg) || !imgReady(word)) return lockupHeight(w);
+  const ch = w * LOCKUP.cabH, cw = ch * cabImg.naturalWidth / cabImg.naturalHeight;
+  ctx.drawImage(cabImg, x + (w - cw) / 2, y, cw, ch);
+  const wh = w * word.naturalHeight / word.naturalWidth;
+  ctx.drawImage(wordColor === '#FFFFFF' ? word : tinted(word, wordColor), x, y + ch + w * LOCKUP.gap, w, wh);
+  return lockupHeight(w);
+}
+
+// Horizontal logo at width w.
+function drawLogoH(ctx, x, y, w, kind) {
+  const img = brandImgs.logoH[kind];
+  if (imgReady(img)) ctx.drawImage(img, x, y, w, w * LOGO_H_RATIO);
+}
+
+// ══════════════════════════════════════════════════
+// FORMAT RENDERERS — each takes its card explicitly; none read the active selection.
+// ══════════════════════════════════════════════════
+function renderFormat(fmt, ctx, W, H, card) {
+  ctx.save();
+  if (fmt === 'tile' || fmt === 'social') {
+    ctx.scale(W / CANVAS_SIZE, H / CANVAS_SIZE);
+    renderTile(ctx);
+    if (fmt === 'social') drawSocialPlate(ctx);
+  } else if (fmt === 'youtube') {
+    ctx.scale(W / YT.W, H / YT.H);
+    renderYouTube(ctx);
+  } else {
+    renderQuote(ctx, W, H, card, fmt);
+  }
+  ctx.restore();
+}
+
+// ── Episode tile (3000×3000 space) ───────────────
+function renderTile(ctx) {
+  ctx.fillStyle = GREEN;
+  ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+  [
+    { key: 'tl', x: TL_X, y: TL_Y, w: IMG_W, h: LEFT_H },
+    { key: 'bl', x: BL_X, y: BL_Y, w: IMG_W, h: LEFT_H },
+    { key: 'right', x: RT_X, y: RT_Y, w: IMG_W, h: RIGHT_H }
+  ].forEach(p => {
+    const sd = slotData[p.key];
+    ctx.fillStyle = BLACK;
+    ctx.fillRect(p.x, p.y, p.w + 2*PAD, p.h + 2*PAD);
+    if (!sd.img) return;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(p.x + PAD, p.y + PAD, p.w, p.h);
+    ctx.clip();
+    drawCover(ctx, sd.img, p.w, p.h, sd.panX, sd.panY, sd.zoom, p.x + PAD, p.y + PAD);
+    ctx.restore();
   });
+}
+
+// ── Social Sharing Graphic plate (3000×3000 space) ──
+// Empty fields preview as dimmed placeholders; export stays disabled until both are filled.
+function drawSocialPlate(ctx) {
+  const px = TL_X + PAD, py = (socialState.slot === 'tl' ? TL_Y : BL_Y) + PAD;
+  const x0 = px + (IMG_W - PLATE.size) / 2, y0 = py + (IMG_W - PLATE.size) / 2;
+  const inner = PLATE.size - 2 * PLATE.margin, cx = x0 + PLATE.size / 2;
+  ctx.save();
+  ctx.fillStyle = GREEN;
+  ctx.fillRect(x0, y0, PLATE.size, PLATE.size);
+
+  const ep = episodeNumber(), guest = val('guestName');
+  const epText = 'EPISODE ' + (ep || '#');
+  const guestText = (guest || 'Guest name').toUpperCase();
+
+  // Lay out at the full logo size; if a long name forces extra lines and the stack overflows the
+  // plate, shrink the whole lockup proportionally until it fits.
+  let w = PLATE.logoW, layout;
+  for (;;) {
+    const lh = lockupHeight(w), gap1 = 0.1 * w, epSize = 0.095 * w, gap2 = 0.045 * w, start = 0.165 * w;
+    setTracking(ctx, 8);
+    const { size: gSize, lines } = fitName(ctx, guestText, inner, start);
+    const total = lh + gap1 + epSize + gap2 + lines.length * gSize * 1.08;
+    layout = { lh, gap1, epSize, gap2, gSize, lines, total };
+    if (total <= inner || w < 300) break;
+    w = Math.floor(w * 0.95);
+  }
+
+  const top = y0 + (PLATE.size - layout.total) / 2;
+  drawLockup(ctx, cx - w / 2, top, w, CREAM);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top'; ctx.fillStyle = BLACK;
+  let ty = top + layout.lh + layout.gap1;
+  ctx.font = jost(600)(layout.epSize); setTracking(ctx, layout.epSize * 0.2);
+  ctx.globalAlpha = ep ? 1 : 0.45;
+  ctx.fillText(epText, cx, ty);
+  ty += layout.epSize + layout.gap2;
+  ctx.font = jost(700)(layout.gSize); setTracking(ctx, 8);
+  ctx.globalAlpha = guest ? 1 : 0.45;
+  layout.lines.forEach((l, i) => ctx.fillText(l, cx, ty + i * layout.gSize * 1.08));
+  ctx.restore();
+}
+
+// ── 16:9 YouTube thumbnail (1920×1080 space) ─────
+function renderYouTube(ctx) {
+  ctx.fillStyle = GREEN;
+  ctx.fillRect(0, 0, YT.W, YT.H);
+  const cab = brandImgs.cabinet, word = brandImgs.wordmark;
+  if (imgReady(cab)) {
+    const cw = YT.cab.h * cab.naturalWidth / cab.naturalHeight;
+    ctx.drawImage(cab, YT.cab.x + YT.cab.boxW / 2 - cw / 2, YT.cab.y, cw, YT.cab.h);
+  }
+  if (imgReady(word)) {
+    ctx.drawImage(word, YT.word.x, YT.word.y, YT.word.w, YT.word.w * word.naturalHeight / word.naturalWidth);
+  }
+  ctx.save();
+  ctx.translate(YT.artX, 0);
+  ctx.scale(YT.H / CANVAS_SIZE, YT.H / CANVAS_SIZE);
+  ctx.imageSmoothingQuality = 'high';
+  renderTile(ctx);
+  ctx.restore();
+}
+
+// ── Quote card ───────────────────────────────────
+const measureCtx = document.createElement('canvas').getContext('2d');
+
+function quoteGeom(card, fmt) { return QUOTE_GEOM[card.layout][fmt === 'quote45' ? 'tall' : 'sq']; }
+function quoteBaseH(fmt) { return fmt === 'quote45' ? 1350 : 1080; }
+
+// Attribution: the credit line (or the guest name), then the show and episode on a second line.
+function attributionText(card) {
+  const ep = episodeNumber();
+  return {
+    name: (card.attr.trim() || val('guestName') || 'Guest name').toUpperCase(),
+    named: !!(card.attr.trim() || val('guestName')),
+    tag: 'WONDER CABINET' + (ep ? ' \u00B7 EP. ' + ep : '')
+  };
+}
+
+// Lays out a card in base units (1080 wide). Pure measurement: draws nothing.
+function layoutQuote(card, fmt) {
+  const ctx = measureCtx, g = quoteGeom(card, fmt), BW = 1080, BH = quoteBaseH(fmt);
+  const raw = card.text.trim();
+  const text = raw ? smartQuotes(raw) : 'Your quote from the interview goes here.';
+  const a = attributionText(card);
+
+  const logoH = g.logoW * LOGO_H_RATIO;
+  const logo = { x: card.layout === 'wash' ? BW - g.margin - g.logoW : g.margin, y: g.margin, w: g.logoW, h: logoH };
+  const fieldTop = g.margin + logoH + g.logoGap, fieldBottom = BH - g.margin;
+  const textX = g.margin, textW = g.textW, attrW = textW - ATTR_RULE.indent;
+
+  setTracking(ctx, 4);
+  const nameSize = fitLine(ctx, a.name, jost(600), attrW, g.attr[0]);
+  const tagSize = fitLine(ctx, a.tag, jost(600), attrW, Math.round(g.attr[0] * 0.78));
+  setTracking(ctx, 0);
+  const attrH = nameSize + nameSize * 0.45 + tagSize;
+
+  const q = fitQuote(ctx, text, textW, fieldBottom - fieldTop - g.gap - attrH, g.lh, g.quote[0], g.quote[1]);
+  ctx.font = garamond(q.size);
+  const lineW = Math.max(...q.lines.map(l => ctx.measureText(l).width));
+  const quoteH = q.lines.length * q.size * g.lh;
+  const blockH = quoteH + g.gap + attrH;
+  const top = fieldTop + Math.max(0, (fieldBottom - fieldTop - blockH) / 2);
+  const attrTop = top + quoteH + g.gap;
+  const markSize = Math.round(q.size * 1.7);
+
+  return {
+    g, BW, BH, text, placeholder: !raw, attr: a, nameSize, tagSize,
+    logo, textX, top, size: q.size, lines: q.lines, attrTop, markSize,
+    boxes: {
+      text: { x: textX, y: top, w: lineW, h: quoteH },
+      attr: { x: textX, y: attrTop, w: textW, h: attrH },
+      mark: { x: textX - q.size * 0.14 - markSize * 0.45, y: top - q.size * 0.1, w: markSize * 0.5, h: markSize * 0.45 },
+      // the wordmark part of the horizontal logo; the cabinet on its left is solid and always reads
+      wordmark: { x: logo.x + logo.w * 0.3, y: logo.y, w: logo.w * 0.7, h: logo.h }
+    }
+  };
+}
+
+// Draws everything under the type: field, photo, blur, wash or fade, and the logo veil.
+// ctx is already scaled to base units; W/H are the output size in device pixels.
+function drawQuoteBackdrop(ctx, W, H, card, L, tune) {
+  const cw = COLORWAYS[card.colorway], g = L.g, k = W / 1080;
+  const sd = slotData[card.slot];
+  const src = { img: sd.img, panX: card.panX, panY: card.panY, zoom: card.zoom };
+  ctx.fillStyle = cw.field;
+  ctx.fillRect(0, 0, L.BW, L.BH);
+
+  if (card.layout === 'wash') {
+    if (src.img) ctx.drawImage(blurredCover(src, W, H, Math.max(1, Math.round(W * WASH_BLUR))), 0, 0, L.BW, L.BH);
+    const grad = ctx.createLinearGradient(0, 0, 0, L.BH);
+    WASH_STOPS.forEach(([at, a]) => grad.addColorStop(at, 'rgba(' + cw.rgb + ',' + (a + (WASH_MAX - a) * tune.boost) + ')'));
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, L.BW, L.BH);
+    if (tune.veil > 0) {
+      // A soft pool of the colorway ground behind the logo, for busy or bright photos.
+      const b = L.logo, cx = b.x + b.w / 2, cy = b.y + b.h / 2;
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.scale(1, (b.h + 60) / (b.w + 60));
+      const r = (b.w + 60) / 2;
+      const veil = ctx.createRadialGradient(0, 0, r * 0.85, 0, 0, r * 2.1);
+      veil.addColorStop(0, 'rgba(' + cw.rgb + ',' + tune.veil + ')');
+      veil.addColorStop(1, 'rgba(' + cw.rgb + ',0)');
+      ctx.fillStyle = veil;
+      ctx.fillRect(-r * 2.2, -r * 2.2, r * 4.4, r * 4.4);
+      ctx.restore();
+    }
+  } else if (src.img) {
+    // Photo right: sharp photo from photoX; a blurred copy fades out across its left part; the
+    // colour field stays solid past the text column, then fades to clear.
+    const px = g.photoX, pw = L.BW - px;
+    const solid = Math.max(0, g.margin + g.textW + FADE.pad - px);
+    ctx.save();
+    ctx.beginPath(); ctx.rect(px, 0, pw, L.BH); ctx.clip();
+    drawCover(ctx, src.img, pw, L.BH, src.panX, src.panY, src.zoom, px, 0);
+    const dpw = pw * k, blurPx = Math.max(1, Math.round(W * FADE_BLUR));
+    const blur = FADE_VARIANT === 'b'
+      ? fadedBlur(src, dpw, H, blurPx, 0, dpw * 0.5)
+      : fadedBlur(src, dpw, H, blurPx, solid * k, (solid + pw * FADE.blur) * k);
+    ctx.drawImage(blur, px, 0, pw, L.BH);
+    ctx.restore();
+    const end = solid + pw * FADE.colour;
+    const grad = ctx.createLinearGradient(px, 0, px + end, 0);
+    const startA = FADE_VARIANT === 'b' ? 0.82 : 1;
+    grad.addColorStop(0, 'rgba(' + cw.rgb + ',' + startA + ')');
+    grad.addColorStop(Math.min(0.999, solid / end), 'rgba(' + cw.rgb + ',' + startA + ')');
+    grad.addColorStop(1, 'rgba(' + cw.rgb + ',0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(px, 0, end, L.BH);
+  }
+}
+
+// Measures the backdrop under each piece of type at low resolution and, on Full wash, raises the wash
+// and adds a logo veil until the targets in CONTRAST are met. Cached per card look.
+const TUNE_SCALE = 0.25;
+function quoteTuning(card, fmt) {
+  const sd = slotData[card.slot];
+  const a = attributionText(card);
+  const key = [fmt, card.layout, card.colorway, card.text, a.name, a.tag, imgId(sd.img), card.panX, card.panY, card.zoom, fontsOk, FADE_VARIANT].join('|');
+  if (tuneCache.has(key)) return tuneCache.get(key);
+
+  const L = layoutQuote(card, fmt), cw = COLORWAYS[card.colorway];
+  const W = Math.round(1080 * TUNE_SCALE), H = Math.round(L.BH * TUNE_SCALE), s = W / 1080;
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const x = c.getContext('2d', { willReadFrequently: true });
+  const dev = b => ({ x: b.x * s, y: b.y * s, w: b.w * s, h: b.h * s });
+  const measure = tune => {
+    x.save(); x.setTransform(s, 0, 0, s, 0, 0);
+    drawQuoteBackdrop(x, W, H, card, L, tune);
+    x.restore();
+    return {
+      text: Math.min(measureContrast(x, dev(L.boxes.text), cw.ink), measureContrast(x, dev(L.boxes.attr), cw.ink)),
+      mark: measureContrast(x, dev(L.boxes.mark), cw.accent),
+      logo: measureContrast(x, dev(L.boxes.wordmark), cw.logoInk)
+    };
+  };
+
+  const tune = { boost: 0, veil: 0 };
+  let m = measure(tune);
+  if (card.layout === 'wash' && sd.img) {
+    while ((m.text < CONTRAST.text || m.mark < CONTRAST.mark) && tune.boost < 1) {
+      tune.boost = Math.min(1, tune.boost + 0.125);
+      m = measure(tune);
+    }
+    while (m.logo < CONTRAST.logo && tune.veil < 1) {
+      tune.veil = Math.min(1, +(tune.veil + 0.2).toFixed(2));
+      m = measure(tune);
+    }
+    // A full veil can still fall short over a bright photo; then the wash itself rises too.
+    while (m.logo < CONTRAST.logo && tune.boost < 1) {
+      tune.boost = Math.min(1, tune.boost + 0.125);
+      m = measure(tune);
+    }
+  }
+  const result = { ...tune, contrast: m };
+  if (tuneCache.size > 300) tuneCache.clear();
+  tuneCache.set(key, result);
+  return result;
+}
+
+// Which parts of a card fall short of the contrast targets (empty when it passes).
+function contrastShortfalls(card, fmt) {
+  if (!slotData[card.slot].img) return [];
+  const m = quoteTuning(card, fmt).contrast, out = [];
+  if (m.text < CONTRAST.text) out.push('text');
+  if (m.mark < CONTRAST.mark) out.push('quote mark');
+  if (m.logo < CONTRAST.logo) out.push('logo');
+  return out;
+}
+
+function renderQuote(ctx, W, H, card, fmt) {
+  const k = W / 1080, cw = COLORWAYS[card.colorway];
+  const L = layoutQuote(card, fmt);
+  const tune = quoteTuning(card, fmt);
+
+  ctx.save();
+  ctx.scale(k, k);
+  drawQuoteBackdrop(ctx, W, H, card, L, tune);
+  drawLogoH(ctx, L.logo.x, L.logo.y, L.logo.w, cw.logo);
+
+  // Hanging quote mark: in the left margin, its top level with the first line.
+  setTracking(ctx, 0);
+  ctx.globalAlpha = L.placeholder ? 0.45 : 1;
+  ctx.font = garamond(L.markSize);
+  ctx.fillStyle = cw.accent;
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText('\u201C', L.textX - L.size * 0.14, L.top + L.markSize * 0.8);
+
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  ctx.font = garamond(L.size);
+  ctx.fillStyle = cw.ink;
+  L.lines.forEach((l, i) => ctx.fillText(l, L.textX, L.top + i * L.size * L.g.lh));
+
+  // Attribution: a short rule, the name, then the show and episode.
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = cw.accent;
+  ctx.fillRect(L.textX, L.attrTop + L.nameSize * 0.42, ATTR_RULE.w, ATTR_RULE.h);
+  setTracking(ctx, 4);
+  ctx.fillStyle = cw.ink;
+  ctx.globalAlpha = L.attr.named ? 1 : 0.45;
+  ctx.font = jost(600)(L.nameSize);
+  ctx.fillText(L.attr.name, L.textX + ATTR_RULE.indent, L.attrTop);
+  ctx.globalAlpha = 1;
+  ctx.font = jost(600)(L.tagSize);
+  ctx.fillText(L.attr.tag, L.textX + ATTR_RULE.indent, L.attrTop + L.nameSize * 1.45);
+  setTracking(ctx, 0);
+  ctx.restore();
+}
+
+// ══════════════════════════════════════════════════
+// FORMAT SWITCHING + LIVE PREVIEW
+// ══════════════════════════════════════════════════
+function setFormat(fmt) {
+  activeFormat = fmt;
+  document.querySelectorAll('.format-tab').forEach(t => t.classList.toggle('active', t.dataset.format === fmt));
+  const canvasFmt = isQuoteFormat(fmt) || fmt === 'youtube';
+  document.getElementById('preview').style.display = canvasFmt ? 'none' : 'grid';
+  document.getElementById('tagOverlay').style.display = canvasFmt ? 'none' : 'block';
+  document.getElementById('slotControls').style.display = canvasFmt ? 'none' : 'flex';
+  document.getElementById('formatCanvas').style.display = canvasFmt ? 'block' : 'none';
+  document.getElementById('panelSocial').style.display = fmt === 'social' ? 'block' : 'none';
+  document.getElementById('panelQuote').style.display = isQuoteFormat(fmt) ? 'block' : 'none';
+  const quote = isQuoteFormat(fmt);
+  document.getElementById('positionHead').textContent = quote ? 'Adjust Quote Photo' : 'Adjust Position';
+  document.getElementById('positionHint').textContent = quote
+    ? 'Drag the preview to reposition this card\u2019s photo.'
+    : 'Drag inside the frame to reposition.';
+  syncZoomSlider(quote ? activeCard.zoom : slotData[activeSlot].zoom);
+  if (fmt === 'social' || quote) switchTab('quotes');
+  updateButtons();
+}
+
+let previewQueued = false;
+function schedulePreview() {
+  if (previewQueued) return;
+  previewQueued = true;
+  requestAnimationFrame(() => { previewQueued = false; renderPreview(); });
+}
+
+function renderPreview() {
+  try {
+    const dpr = window.devicePixelRatio || 1;
+    const overlay = document.getElementById('tagOverlay');
+    overlay.width = 400 * dpr; overlay.height = 400 * dpr;
+    const octx = overlay.getContext('2d');
+    octx.clearRect(0, 0, overlay.width, overlay.height);
+    if (activeFormat === 'social') {
+      octx.save(); octx.scale(overlay.width / CANVAS_SIZE, overlay.height / CANVAS_SIZE); drawSocialPlate(octx); octx.restore();
+    }
+    if (isQuoteFormat(activeFormat) || activeFormat === 'youtube') {
+      const f = FORMATS[activeFormat], cvs = document.getElementById('formatCanvas');
+      const cssH = 400 * f.h / f.w;
+      cvs.style.height = cssH + 'px';
+      cvs.width = Math.round(400 * dpr); cvs.height = Math.round(cssH * dpr);
+      renderFormat(activeFormat, cvs.getContext('2d'), cvs.width, cvs.height, activeCard);
+    }
+    if (isQuoteFormat(activeFormat)) { drawQuoteThumbs(); updateQuoteContrastNote(); }
+  } catch (e) {
+    console.error('Preview failed:', e);
+  }
+}
+
+function updateQuoteContrastNote() {
+  const el = document.getElementById('quoteContrast');
+  if (!slotData[activeCard.slot].img) { el.textContent = ''; el.classList.remove('warn'); return; }
+  const short = contrastShortfalls(activeCard, activeFormat);
+  el.classList.toggle('warn', short.length > 0);
+  el.textContent = short.length
+    ? 'Low contrast behind the ' + short.join(' and ') + '. Try another framing, photo or colorway.'
+    : 'Contrast checked: text and logo read clearly.';
+}
+
+// ══════════════════════════════════════════════════
+// EXPORT PREVIEW — every asset the episode can produce
+// ══════════════════════════════════════════════════
+const QUOTE_SLOT_LABELS = { right: 'right (guest) panel', tl: 'top left panel', bl: 'bottom left panel' };
+const NEEDS_BRAND = { social: true, youtube: true, quote: true, quote45: true };
+
+function assetList() {
+  const list = [{ fmt: 'tile' }, { fmt: 'social' }, { fmt: 'youtube' }];
+  quoteCards.forEach(card => list.push({ fmt: 'quote', card }, { fmt: 'quote45', card }));
+  return list;
+}
+
+// What stops an asset from exporting, or null when it's ready.
+function assetMissing(a) {
+  if (NEEDS_BRAND[a.fmt] && brandError) return 'Not ready \u2014 logo failed to load (reload the page)';
+  if (a.card) {
+    if (!a.card.text.trim()) return 'Needs quote text';
+    if (!slotData[a.card.slot].img) return 'Needs a photo in the ' + QUOTE_SLOT_LABELS[a.card.slot];
+    return null;
+  }
+  if (!(slotData.tl.img && slotData.bl.img && slotData.right.img)) return 'Needs all three panel images';
+  if (a.fmt === 'social' && !(episodeNumber() && val('guestName'))) {
+    return 'Needs ' + [!episodeNumber() && 'Episode #', !val('guestName') && 'Guest'].filter(Boolean).join(' and ');
+  }
+  return null;
+}
+const assetReady = a => !assetMissing(a);
+
+function assetName(a) {
+  if (!a.card) return FORMATS[a.fmt].label;
+  return 'Quote card ' + (quoteCards.indexOf(a.card) + 1) + ' \u00B7 ' + (a.fmt === 'quote45' ? '4:5' : '1:1') + ' \u00B7 ' + QUOTE_LAYOUTS[a.card.layout];
+}
+
+function defaultFilenameBase() { return 'wondercabinet-' + (slugify(val('guestName')) || 'guest'); }
+function filenameBase() {
+  // Hand-typed names go through slugify too: a / or \ would make folders inside the zip, and
+  // characters like : or ? give odd or invalid download names.
+  return slugify(val('exportName').replace(/\.(jpe?g|png|zip|md)$/i, '')) || defaultFilenameBase();
+}
+function formatFilename(fmt, card) {
+  const base = filenameBase();
+  if (isQuoteFormat(fmt))
+    return base + '-quote-' + (quoteCards.indexOf(card) + 1) + '-' + LAYOUT_SLUG[card.layout] + (fmt === 'quote45' ? '-4x5' : '') + '.jpg';
+  return base + FORMATS[fmt].suffix + '.jpg';
+}
+function onExportNameInput() {
+  exportNameEdited = val('exportName') !== '';
+  updateCreditsPreview();
+  scheduleExportPane();
+}
+function syncFilenameBase() {
+  if (exportNameEdited) return;
+  document.getElementById('exportName').value = defaultFilenameBase();
+}
+
+let exportPaneEls = [];
+function renderExportPane() {
+  const wrap = document.getElementById('assetGrid');
+  wrap.innerHTML = '';
+  const grids = {};
+  for (const [key, label] of [['art', 'Episode art'], ['quotes', 'Quote cards']]) {
+    const head = document.createElement('h3'); head.className = 'asset-group-head'; head.textContent = label;
+    const grid = document.createElement('div'); grid.className = 'asset-grid';
+    wrap.append(head, grid);
+    grids[key] = grid;
+  }
+  exportPaneEls = assetList().map(a => {
+    const el = document.createElement('div');
+    el.className = 'asset';
+    const box = document.createElement('div'); box.className = 'thumb-box';
+    const cvs = document.createElement('canvas'); box.appendChild(cvs);
+    const name = document.createElement('div'); name.className = 'asset-name';
+    const file = document.createElement('div'); file.className = 'asset-file';
+    const dims = document.createElement('div'); dims.className = 'asset-file';
+    const status = document.createElement('div'); status.className = 'asset-status';
+    const btn = document.createElement('button'); btn.className = 'btn btn-accent'; btn.textContent = 'Export';
+    btn.onclick = () => exportAsset(a);
+    el.append(box, name, file, dims, status, btn);
+    grids[a.card ? 'quotes' : 'art'].appendChild(el);
+    return { a, cvs, name, file, dims, status, btn };
+  });
+  updateExportPane();
+}
+
+function updateExportPane() {
+  const list = assetList();
+  if (list.length !== exportPaneEls.length || list.some((a, i) => a.fmt !== exportPaneEls[i].a.fmt || a.card !== exportPaneEls[i].a.card)) {
+    renderExportPane();
+    return;
+  }
+  const dpr = window.devicePixelRatio || 1;
+  exportPaneEls.forEach(({ a, cvs, name, file, dims, status, btn }) => {
+    // Fit each thumbnail inside a 200×170 frame so mixed aspect ratios line up.
+    const f = FORMATS[a.fmt], s = Math.min(200 / f.w, 170 / f.h);
+    const cw = Math.round(f.w * s), ch = Math.round(f.h * s);
+    cvs.width = Math.round(cw * dpr); cvs.height = Math.round(ch * dpr);
+    cvs.style.width = cw + 'px'; cvs.style.height = ch + 'px';
+    try {
+      renderFormat(a.fmt, cvs.getContext('2d'), cvs.width, cvs.height, a.card);
+    } catch (e) {
+      console.error('Thumbnail failed:', e);
+    }
+    const missing = assetMissing(a);
+    const short = !missing && a.card ? contrastShortfalls(a.card, a.fmt) : [];
+    name.textContent = assetName(a);
+    file.textContent = formatFilename(a.fmt, a.card);
+    dims.textContent = f.w + ' \u00D7 ' + f.h;
+    status.textContent = missing || (short.length ? 'Ready \u2014 low contrast behind ' + short.join(', ') : 'Ready');
+    status.className = 'asset-status' + (missing ? '' : short.length ? ' warn' : ' ready');
+    btn.disabled = !!missing;
+  });
+}
+
+let exportPaneTimer = null;
+function scheduleExportPane() {
+  clearTimeout(exportPaneTimer);
+  exportPaneTimer = setTimeout(updateExportPane, 150);
+}
+
+// ══════════════════════════════════════════════════
+// EXPORT
+// ══════════════════════════════════════════════════
+// A browser that blocks a download doesn't tell the page, so every export says where to look.
+const DOWNLOAD_HINT = 'If nothing downloaded, check your browser\u2019s download permissions for this site.';
+
+function downloadBlob(blob, filename) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  // Revoking straight away can cancel the download in some browsers.
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+
+// Renders one asset at full size and encodes it. Throws with a message a producer can act on.
+async function renderAssetBlob(a) {
+  const missing = assetMissing(a);
+  if (missing) throw new Error(missing);
+  await ensureFonts();
+  await brandLoaded;
+  if (NEEDS_BRAND[a.fmt] && brandError) throw new Error('the logo images failed to load. Reload the page and try again.');
+  const f = FORMATS[a.fmt];
+  const cvs = document.createElement('canvas');
+  cvs.width = f.w; cvs.height = f.h;
+  const ctx = cvs.getContext('2d');
+  if (!ctx) throw new Error('the browser couldn\u2019t create a drawing canvas (it may be out of memory).');
+  renderFormat(a.fmt, ctx, f.w, f.h, a.card);
+  const quality = parseInt(document.getElementById('qualitySlider').value, 10) / 100;
+  let blob;
+  try {
+    blob = await new Promise(resolve => cvs.toBlob(resolve, 'image/jpeg', quality));
+  } catch (e) {
+    if (e && e.name === 'SecurityError') blob = null; else throw e;
+  }
+  if (!blob) {
+    throw new Error('the browser refused to save the image. This usually means a photo was loaded without CORS permission; remove it and add it again from Unsplash search, or upload it as a file.');
+  }
+  return blob;
+}
+
+async function exportAsset(a) {
+  const name = formatFilename(a.fmt, a.card);
+  const f = FORMATS[a.fmt];
+  setExportStatus('Compositing ' + name + ' at ' + f.w + '\u00D7' + f.h + '\u2026');
+  await new Promise(r => requestAnimationFrame(r));
+  try {
+    const blob = await renderAssetBlob(a);
+    downloadBlob(blob, name);
+    setExportStatus('Exported ' + name + ' (' + (blob.size / 1024 / 1024).toFixed(1) + ' MB). ' + DOWNLOAD_HINT);
+  } catch (e) {
+    setExportStatus('Export of ' + name + ' failed: ' + e.message, true);
+  }
+}
+
+// Kept for the pipeline add-on and older muscle memory: exports the episode tile.
+function exportImage() { return exportAsset({ fmt: 'tile' }); }
+
+// One zip with every ready asset plus credits.md. Assets that fail are listed and the rest still export.
+async function exportAllReady() {
+  const assets = assetList().filter(assetReady);
+  if (!assets.length) return;
+  const base = filenameBase();
+  const btn = document.getElementById('exportAllBtn');
+  btn.disabled = true;
+  try {
+    if (typeof JSZip === 'undefined') {
+      notice('The zip library didn\u2019t load, so files download one at a time. Your browser may ask permission to download several files.');
+      for (const a of assets) {
+        await exportAsset(a);
+        await new Promise(r => setTimeout(r, 400));  // browsers throttle back-to-back downloads
+      }
+      exportCredits();
+      return;
+    }
+    const zip = new JSZip();
+    const failures = [];
+    for (let i = 0; i < assets.length; i++) {
+      const a = assets[i], name = formatFilename(a.fmt, a.card);
+      setExportStatus('Building ' + base + '.zip \u2014 ' + (i + 1) + ' of ' + assets.length + ': ' + name + '\u2026');
+      await new Promise(r => requestAnimationFrame(r));
+      try {
+        zip.file(name, await renderAssetBlob(a));
+      } catch (e) {
+        failures.push(name + ': ' + e.message);
+      }
+    }
+    const md = generateCreditsMarkdown();
+    if (md) zip.file(base + '-credits.md', md);
+    if (failures.length) zip.file('EXPORT-ERRORS.txt', 'These assets failed to export:\n\n' + failures.join('\n') + '\n');
+    setExportStatus('Compressing ' + base + '.zip\u2026');
+    const out = await zip.generateAsync({ type: 'blob', compression: 'STORE' });
+    downloadBlob(out, base + '.zip');
+    const done = assets.length - failures.length;
+    setExportStatus('Exported ' + base + '.zip: ' + done + ' image' + (done === 1 ? '' : 's') + (md ? ' and credits.md' : '') +
+      (failures.length ? '. ' + failures.length + ' failed \u2014 ' + failures.join('; ') : '.') + ' ' + DOWNLOAD_HINT, failures.length > 0);
+  } catch (e) {
+    setExportStatus('Export all failed: ' + e.message, true);
+  } finally {
+    updateButtons();
+  }
 }
 
 // ══════════════════════════════════════════════════
 // CREDITS MARKDOWN GENERATION
 // ══════════════════════════════════════════════════
+function poolCredit(pe) {
+  if (!pe) return '?';
+  if (pe.source === 'unsplash') return pe.photographer + ' (Unsplash)';
+  return pe.photographer + (pe.sourceLabel ? ' (' + pe.sourceLabel + ')' : '');
+}
+
 function generateCreditsMarkdown() {
-  const filename = document.getElementById('exportName').value || 'episode-art.jpg';
+  const filename = filenameBase() + '.jpg';
   const panels = [];
   const tableRows = [];
 
-  [['tl','Top left'],['bl','Bottom left'],['right','Right']].forEach(([key, label]) => {
+  [['tl', 'Top left'], ['bl', 'Bottom left'], ['right', 'Right']].forEach(([key, label]) => {
     const s = slotData[key];
     const p = sourcePool.find(e => e.id === s.sourceId);
     if (!p) return;
 
-    let creditStr, sourceStr, urlStr;
+    let creditStr, sourceStr;
     if (p.source === 'unsplash') {
-      creditStr = 'Photo by [' + p.photographer + '](' + (p.photographerUrl || p.url) + ') on [Unsplash](https://unsplash.com/?utm_source=wonder_cabinet_art_builder&utm_medium=referral)';
+      creditStr = 'Photo by [' + p.photographer + '](' + (p.photographerUrl || p.url) + ') on [Unsplash](https://unsplash.com/' + UTM + ')';
       sourceStr = 'Unsplash';
-      urlStr = p.url || '';
     } else {
       creditStr = p.credit;
       sourceStr = p.source === 'local' ? 'Uploaded' : p.source;
-      urlStr = p.url || '';
     }
+    const urlStr = p.url || '';
 
-    panels.push({ label, code: s.code, creditStr });
+    panels.push({ key, label, code: s.code, creditStr });
     tableRows.push('| ' + (p.filename || s.code) + ' | ' + label + ' panel | ' + p.photographer + ' | ' + (urlStr ? '[Source](' + urlStr + ')' : sourceStr) + ' |');
   });
 
   if (panels.length === 0) return null;
 
-  const clockwise = [panels.find(p => p.label === 'Top left'), panels.find(p => p.label === 'Right'), panels.find(p => p.label === 'Bottom left')].filter(Boolean);
-  const captionParts = clockwise.map(p => {
-    const pe = sourcePool.find(e => e.id === slotData[p.label === 'Top left' ? 'tl' : p.label === 'Right' ? 'right' : 'bl'].sourceId);
-    if (!pe) return '';
-    if (pe.source === 'unsplash') return pe.photographer + ' (Unsplash)';
-    return pe.photographer + (pe.sourceLabel ? ' (' + pe.sourceLabel + ')' : '');
-  });
-
+  const clockwise = ['tl', 'right', 'bl'].map(k => panels.find(p => p.key === k)).filter(Boolean);
+  const captionParts = clockwise.map(p => poolCredit(sourcePool.find(e => e.id === slotData[p.key].sourceId)));
   const altParts = clockwise.map(p => {
-    const slotKey = p.label === 'Top left' ? 'tl' : p.label === 'Right' ? 'right' : 'bl';
-    const pe = sourcePool.find(e => e.id === slotData[slotKey].sourceId);
+    const pe = sourcePool.find(e => e.id === slotData[p.key].sourceId);
     const desc = pe ? (pe.filename || pe.photographer || p.code) : p.code;
     return p.label.toLowerCase() + ': [describe ' + desc + ']';
   });
+
+  const guest = val('guestName'), ep = episodeNumber();
+  const showEp = 'Wonder Cabinet' + (ep ? ' episode ' + ep : '');
+  const readyCards = quoteCards.filter(c => c.text.trim() && slotData[c.slot].img);
+  const cardFile = card => formatFilename('quote', card).replace(/\.jpg$/, '');
+  // Inside a quotation set in “ ”, the quote's own double quotes become single ones.
+  const nested = t => t.replace(/\u201C/g, '\u2018').replace(/\u201D/g, '\u2019');
+  const opening = t => { const w = t.split(/\s+/); return w.slice(0, 8).join(' ') + (w.length > 8 ? '\u2026' : ''); };
+  const panelDesc = card => (card.slot === 'right' ? 'the guest photo' : 'the ' + QUOTE_SLOT_LABELS[card.slot] + ' image') +
+    ' (' + poolCredit(sourcePool.find(e => e.id === slotData[card.slot].sourceId)) + ')';
+
+  const quoteSection = readyCards.length ? [
+    '## Quote Cards',
+    '',
+    ...readyCards.map(card => {
+      const text = nested(smartQuotes(card.text.trim()).replace(/\u00A0/g, ' '));
+      return '- **' + cardFile(card) + '** (1:1 and 4:5) \u2014 \u201C' + opening(text) + '\u201D \u2014 ' +
+        (card.attr.trim() || guest || 'guest') + ' \u00B7 ' + QUOTE_LAYOUTS[card.layout] + ', ' + COLORWAYS[card.colorway].name +
+        ' \u00B7 CREDIT: ' + poolCredit(sourcePool.find(e => e.id === slotData[card.slot].sourceId));
+    }),
+    ''
+  ] : [];
+
+  const altSection = [
+    '## Alt Text (draft)',
+    '',
+    '_Drafts built from the episode details. Check each against the image, and describe the photos, before publishing._',
+    '',
+    '- **' + filenameBase() + '-social:** ' + showEp + (guest ? ' with ' + guest : '') + ': a three-panel photo collage with a green label reading \u201CWonder Cabinet' + (ep ? ', Episode ' + ep : '') + (guest ? ', ' + guest : '') + '.\u201D',
+    '- **' + filenameBase() + '-youtube:** The Wonder Cabinet logo on green beside the ' + showEp + ' art' + (guest ? ' for ' + guest : '') + '.',
+    ...readyCards.map(card => {
+      const text = nested(smartQuotes(card.text.trim()).replace(/\u00A0/g, ' '));
+      return '- **' + cardFile(card) + '** (1:1 and 4:5): Quote card. \u201C' + text + '\u201D \u2014 ' + (card.attr.trim() || guest || 'the guest') + ', ' + showEp + '. Set over ' +
+        (card.layout === 'wash' ? 'a blurred, tinted version of ' : 'a ' + COLORWAYS[card.colorway].name.toLowerCase() + ' field beside ') + panelDesc(card) + '.';
+    }),
+    ''
+  ];
 
   return [
     '# Image Credits \u2014 ' + filename,
@@ -1138,6 +2271,8 @@ function generateCreditsMarkdown() {
     '|------|----------|--------|--------|',
     tableRows.join('\n'),
     '',
+    ...quoteSection,
+    ...altSection,
     '---',
     '*Generated by Wonder Cabinet Episode Art Builder on ' + new Date().toISOString().split('T')[0] + '*',
     ''
@@ -1147,14 +2282,12 @@ function generateCreditsMarkdown() {
 function exportCredits() {
   const md = generateCreditsMarkdown();
   if (!md) return;
-  const filename = document.getElementById('exportName').value || 'episode-art.jpg';
-  const blob = new Blob([md], { type: 'text/markdown' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = filename.replace(/\.\w+$/, '') + '-credits.md';
-  a.click();
-  URL.revokeObjectURL(a.href);
-  document.getElementById('exportStatus').textContent = 'Credits markdown exported.';
+  try {
+    downloadBlob(new Blob([md], { type: 'text/markdown' }), filenameBase() + '-credits.md');
+    setExportStatus('Exported ' + filenameBase() + '-credits.md');
+  } catch (e) {
+    setExportStatus('Couldn\u2019t save credits.md: ' + e.message, true);
+  }
 }
 
 function updateCreditsPreview() {
@@ -1174,17 +2307,199 @@ function copyCredits() {
   const btn = document.getElementById('copyBtn');
   navigator.clipboard.writeText(pre.textContent).then(() => {
     btn.textContent = 'Copied!';
-    btn.classList.add('copied');
-    setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+    setTimeout(() => { btn.textContent = 'Copy'; }, 2000);
+  }).catch(() => {
+    btn.textContent = 'Copy failed \u2014 select the text instead';
+    setTimeout(() => { btn.textContent = 'Copy'; }, 3000);
   });
 }
+
+// ══════════════════════════════════════════════════
+// EPISODE + QUOTE CARD INPUTS
+// ══════════════════════════════════════════════════
+function onEpisodeInput() { syncFilenameBase(); updateButtons(); }
+function onQuoteLayout() { activeCard.layout = document.getElementById('quoteLayout').value; renderQuoteCards(); updateButtons(); }
+function onQuoteSlot() { activeCard.slot = document.getElementById('quoteSlot').value; updateButtons(); }
+function onSocialSlot() { socialState.slot = document.getElementById('socialSlot').value; updateButtons(); }
+
+// The strip (left column) and the wording list (right column) are rebuilt only when cards are added,
+// removed or selected. Typing updates the card in place, so focus is never lost to a rebuild.
+function renderQuoteCards() {
+  const strip = document.getElementById('quoteCards');
+  strip.innerHTML = '';
+  quoteCards.forEach((card, i) => {
+    const el = document.createElement('div');
+    el.className = 'quote-mini' + (card === activeCard ? ' active' : '');
+    el.setAttribute('role', 'button');
+    el.tabIndex = 0;
+    el.title = 'Card ' + (i + 1);
+    el.onclick = () => selectQuoteCard(card);
+    el.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectQuoteCard(card); } };
+    el.appendChild(document.createElement('canvas'));
+    const label = document.createElement('div');
+    label.className = 'mini-label';
+    label.textContent = 'Card ' + (i + 1);
+    el.appendChild(label);
+    strip.appendChild(el);
+  });
+  renderQuoteList();
+  drawQuoteThumbs();
+}
+
+function renderQuoteList() {
+  const list = document.getElementById('quoteList');
+  list.innerHTML = '';
+  quoteCards.forEach((card, i) => {
+    const row = document.createElement('div');
+    row.className = 'quote-row' + (card === activeCard ? ' active' : '');
+    const head = document.createElement('div');
+    head.className = 'quote-row-head';
+    const title = document.createElement('span');
+    title.textContent = 'Card ' + (i + 1) + (card === activeCard ? ' \u00B7 selected' : '');
+    const spacer = document.createElement('span');
+    spacer.className = 'spacer';
+    head.append(title, spacer);
+    if (card !== activeCard) {
+      const sel = document.createElement('button');
+      sel.className = 'btn';
+      sel.textContent = 'Select';
+      sel.onclick = () => selectQuoteCard(card);
+      head.appendChild(sel);
+    }
+    if (quoteCards.length > 1) {
+      const rm = document.createElement('button');
+      rm.className = 'btn';
+      rm.textContent = 'Remove';
+      rm.onclick = () => removeQuoteCard(card);
+      head.appendChild(rm);
+    }
+    const ta = document.createElement('textarea');
+    ta.value = card.text;
+    ta.rows = Math.max(3, Math.ceil(card.text.length / 85) + 1);
+    ta.placeholder = 'Quote ' + (i + 1);
+    ta.setAttribute('aria-label', 'Quote ' + (i + 1));
+    ta.oninput = () => { card.text = ta.value; updateButtons(); };
+    // Typographic cleanup on leaving the field, so the cursor never jumps while typing.
+    ta.onchange = () => {
+      const clean = smartQuotes(ta.value.trim()).replace(/\u00A0/g, ' ');
+      if (clean !== ta.value) { ta.value = clean; card.text = clean; updateButtons(); }
+    };
+    const attr = document.createElement('input');
+    attr.type = 'text';
+    attr.value = card.attr;
+    attr.placeholder = 'Credit line \u2014 defaults to the guest name';
+    attr.setAttribute('aria-label', 'Credit line for quote ' + (i + 1));
+    attr.oninput = () => { card.attr = attr.value; updateButtons(); };
+    row.append(head, ta, attr);
+    list.appendChild(row);
+  });
+}
+
+function drawQuoteThumbs() {
+  const dpr = window.devicePixelRatio || 1, px = Math.round(64 * dpr);
+  document.querySelectorAll('#quoteCards canvas').forEach((cvs, i) => {
+    if (!quoteCards[i]) return;
+    cvs.width = px; cvs.height = px;
+    try { renderQuote(cvs.getContext('2d'), px, px, quoteCards[i], 'quote'); }
+    catch (e) { console.error('Card thumbnail failed:', e); }
+  });
+}
+
+function selectQuoteCard(card) {
+  activeCard = card;
+  document.getElementById('quoteLayout').value = card.layout;
+  document.getElementById('quoteSlot').value = card.slot;
+  if (isQuoteFormat(activeFormat)) syncZoomSlider(card.zoom);
+  renderSwatches();
+  renderQuoteCards();
+  updateButtons();
+}
+
+function addQuoteCard() {
+  const card = newQuoteCard(activeCard);
+  quoteCards.push(card);
+  selectQuoteCard(card);
+  switchTab('quotes');
+  const areas = document.querySelectorAll('#quoteList .quote-row textarea');
+  if (areas.length) areas[areas.length - 1].focus();
+}
+
+function removeQuoteCard(card) {
+  const i = quoteCards.indexOf(card);
+  if (i === -1 || quoteCards.length < 2) return;
+  quoteCards.splice(i, 1);
+  selectQuoteCard(card === activeCard ? quoteCards[Math.min(i, quoteCards.length - 1)] : activeCard);
+}
+
+// Paste several quotes, blank-line separated; each becomes a card in the active card's look.
+// Fills the active card first if it's still empty.
+function addBulkQuotes() {
+  const box = document.getElementById('bulkQuotes');
+  const quotes = box.value.split(/\n\s*\n/)
+    .map(q => stripWrappingQuotes(q.replace(/\s+/g, ' ')))
+    .map(q => smartQuotes(q).replace(/\u00A0/g, ' '))
+    .filter(Boolean);
+  if (!quotes.length) return;
+  const count = quotes.length;
+  const look = activeCard;
+  let first = null;
+  if (!activeCard.text.trim()) { activeCard.text = quotes.shift(); first = activeCard; }
+  quotes.forEach(q => { const c = newQuoteCard(look, q); quoteCards.push(c); if (!first) first = c; });
+  box.value = '';
+  document.getElementById('bulkStatus').textContent = 'Added ' + count + ' quote card' + (count === 1 ? '' : 's') + '.';
+  selectQuoteCard(first);
+}
+
+function renderSwatches() {
+  const wrap = document.getElementById('swatches');
+  wrap.innerHTML = '';
+  Object.entries(COLORWAYS).forEach(([key, cw]) => {
+    const b = document.createElement('button');
+    b.className = 'swatch' + (key === activeCard.colorway ? ' active' : '');
+    b.style.background = cw.field;
+    b.title = cw.name;
+    b.setAttribute('aria-label', 'Colorway: ' + cw.name);
+    b.setAttribute('aria-pressed', key === activeCard.colorway);
+    b.onclick = () => { activeCard.colorway = key; renderSwatches(); updateButtons(); };
+    wrap.appendChild(b);
+  });
+  const name = document.createElement('span');
+  name.className = 'swatch-name';
+  name.textContent = COLORWAYS[activeCard.colorway].name;
+  wrap.appendChild(name);
+}
+
+// Drag the quote preview to pan the active card's photo.
+(function setupQuoteDrag() {
+  const cvs = document.getElementById('formatCanvas');
+  let drag = null;
+  cvs.addEventListener('mousedown', e => {
+    if (!isQuoteFormat(activeFormat)) return;
+    drag = { x: e.clientX, y: e.clientY, panX: activeCard.panX, panY: activeCard.panY, card: activeCard };
+    cvs.style.cursor = 'grabbing';
+    e.preventDefault();
+  });
+  window.addEventListener('mousemove', e => {
+    if (!drag) return;
+    const r = cvs.getBoundingClientRect();
+    drag.card.panX = Math.max(0, Math.min(1, drag.panX - (e.clientX - drag.x) / r.width * 1.5));
+    drag.card.panY = Math.max(0, Math.min(1, drag.panY - (e.clientY - drag.y) / r.height * 1.5));
+    schedulePreview();
+  });
+  window.addEventListener('mouseup', () => {
+    if (!drag) return;
+    drag = null;
+    cvs.style.cursor = 'grab';
+    updateButtons();
+  });
+})();
 
 // ══════════════════════════════════════════════════
 // SAVED COMBOS
 // ══════════════════════════════════════════════════
 function saveCombo() {
   const combo = {};
-  ['tl','bl','right'].forEach(k => {
+  ['tl', 'bl', 'right'].forEach(k => {
     const s = slotData[k];
     const poolEntry = sourcePool.find(p => p.id === s.sourceId);
     combo[k] = {
@@ -1208,11 +2523,18 @@ function renderSaved() {
     div.onclick = () => loadCombo(i);
     const grid = document.createElement('div');
     grid.className = 'mini-grid';
-    [['tl','tl'],['right','rt'],['bl','bl']].forEach(([key, cls]) => {
-      const img = document.createElement('img');
-      img.src = combo[key].thumbUrl || '';
-      img.className = cls;
-      grid.appendChild(img);
+    [['tl', 'tl'], ['right', 'rt'], ['bl', 'bl']].forEach(([key, cls]) => {
+      let el;
+      if (combo[key].thumbUrl) {
+        el = document.createElement('img');
+        el.crossOrigin = 'anonymous';
+        el.alt = '';
+        el.src = combo[key].thumbUrl;
+      } else {
+        el = document.createElement('span');
+      }
+      el.className = cls;
+      grid.appendChild(el);
     });
     div.appendChild(grid);
     const lbl = document.createElement('div');
@@ -1221,8 +2543,9 @@ function renderSaved() {
     div.appendChild(lbl);
     const x = document.createElement('button');
     x.className = 'mini-x';
-    x.textContent = '\u00d7';
-    x.onclick = e => { e.stopPropagation(); savedCombos.splice(i,1); renderSaved(); };
+    x.textContent = '\u00D7';
+    x.title = 'Remove saved combination';
+    x.onclick = e => { e.stopPropagation(); savedCombos.splice(i, 1); renderSaved(); };
     div.appendChild(x);
     row.appendChild(div);
   });
@@ -1230,7 +2553,7 @@ function renderSaved() {
 
 function loadCombo(i) {
   const combo = savedCombos[i];
-  ['tl','bl','right'].forEach(k => {
+  ['tl', 'bl', 'right'].forEach(k => {
     const entry = sourcePool.find(p => p.id === combo[k].sourceId);
     if (!entry || !entry.img) return;
     const sd = slotData[k];
@@ -1251,6 +2574,13 @@ function loadCombo(i) {
 // ══════════════════════════════════════════════════
 // LIGHTBOX
 // ══════════════════════════════════════════════════
+function openLightbox(src, caption) {
+  const img = document.getElementById('lightbox-img');
+  img.crossOrigin = 'anonymous';
+  img.src = src;
+  document.getElementById('lightbox-caption').textContent = caption;
+  document.getElementById('lightbox').classList.add('active');
+}
 function closeLightbox() {
   document.getElementById('lightbox').classList.remove('active');
 }
@@ -1260,7 +2590,7 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLightbo
 // RESIZE HANDLER
 // ══════════════════════════════════════════════════
 window.addEventListener('resize', () => {
-  ['tl','bl','right'].forEach(k => { if (slotData[k].img) renderSlot(k); });
+  ['tl', 'bl', 'right'].forEach(k => { if (slotData[k].img) renderSlot(k); });
 });
 
 // ══════════════════════════════════════════════════
@@ -1268,6 +2598,10 @@ window.addEventListener('resize', () => {
 // ══════════════════════════════════════════════════
 window.addEventListener('load', () => {
   setActiveSlot('tl');
+  renderSwatches();
+  renderQuoteCards();
+  setFormat('tile');
+  ensureFonts().then(() => updateButtons());
 });
 </script>
 
