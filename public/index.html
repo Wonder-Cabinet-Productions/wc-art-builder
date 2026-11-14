@@ -1470,10 +1470,30 @@ function blurredCover(src, W, H, blurPx) {
   const c = document.createElement('canvas');
   c.width = W; c.height = H;
   const x = c.getContext('2d');
-  const m = blurPx * 2;  // overdraw so blurred edges don't fade to transparent
   if (CANVAS_FILTER_OK) {
+    // The blur needs pixels past the edges, or it fades them to transparent. Pad by m on every side
+    // at the SAME scale and offset as the sharp photo: Photo right lays this over the sharp copy, and
+    // a cover drawn into the padded box instead is scaled up 6–10%, which doubles every edge (#19).
+    const m = blurPx * 2;
+    const p = document.createElement('canvas');
+    p.width = W + 2 * m; p.height = H + 2 * m;
+    const px = p.getContext('2d');
+    // Clamp the crop's edge pixels out into the margin first...
+    const t = document.createElement('canvas');
+    t.width = W; t.height = H;
+    drawCover(t.getContext('2d'), src.img, W, H, src.panX, src.panY, src.zoom, 0, 0);
+    px.drawImage(t, 0, 0, 1, H, 0, m, m, H);              // left
+    px.drawImage(t, W - 1, 0, 1, H, m + W, m, m, H);      // right
+    px.drawImage(t, 0, 0, W, 1, m, 0, W, m);              // top
+    px.drawImage(t, 0, H - 1, W, 1, m, m + H, W, m);      // bottom
+    px.drawImage(t, 0, 0, 1, 1, 0, 0, m, m);              // corners
+    px.drawImage(t, W - 1, 0, 1, 1, m + W, 0, m, m);
+    px.drawImage(t, 0, H - 1, 1, 1, 0, m + H, m, m);
+    px.drawImage(t, W - 1, H - 1, 1, 1, m + W, m + H, m, m);
+    // ...then the photo itself, which overwrites the clamp wherever it runs past the crop.
+    drawCover(px, src.img, W, H, src.panX, src.panY, src.zoom, m, m);
     x.filter = 'blur(' + blurPx + 'px)';
-    drawCover(x, src.img, W + 2 * m, H + 2 * m, src.panX, src.panY, src.zoom, -m, -m);
+    x.drawImage(p, -m, -m);
   } else {
     // Fallback: shrink so each pixel covers about half the blur radius, then scale back up smoothly.
     const f = Math.max(2, blurPx / 2);
