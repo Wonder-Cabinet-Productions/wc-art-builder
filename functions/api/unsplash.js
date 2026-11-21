@@ -32,12 +32,37 @@ export async function onRequest(context) {
   }
 
   // Track download (required by Unsplash API guidelines)
+  // The client passes photo.links.download_location, which already carries a query string
+  // (?ixid=...) that Unsplash wants kept intact, so the key goes in the Authorization header.
+  // Only Unsplash's own download endpoint is accepted, so the key is never sent anywhere else.
   if (action === 'track-download') {
-    const downloadUrl = url.searchParams.get('url');
-    if (downloadUrl) {
-      await fetch(`${downloadUrl}?client_id=${key}`).catch(() => {});
+    let target;
+    try {
+      target = new URL(url.searchParams.get('url') || '');
+    } catch {
+      target = null;
     }
-    return new Response('ok', { status: 200 });
+    if (!target || target.protocol !== 'https:' || target.hostname !== 'api.unsplash.com' ||
+        !/^\/photos\/[A-Za-z0-9_-]+\/download\/?$/.test(target.pathname)) {
+      return new Response(JSON.stringify({ error: 'url must be an Unsplash download_location' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+    try {
+      const resp = await fetch(target.toString(), {
+        headers: { 'Authorization': `Client-ID ${key}` }
+      });
+      return new Response(JSON.stringify({ tracked: resp.ok, status: resp.status }), {
+        status: resp.ok ? 200 : 502,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    } catch (e) {
+      return new Response(JSON.stringify({ tracked: false, error: e.message }), {
+        status: 502,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
   }
 
   return new Response(JSON.stringify({ error: 'Unknown action' }), {
