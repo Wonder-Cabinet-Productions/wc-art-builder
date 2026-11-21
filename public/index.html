@@ -45,6 +45,16 @@
   .slot#slot-tl { grid-column: 1; grid-row: 1; }
   .slot#slot-bl { grid-column: 1; grid-row: 2; }
   .slot#slot-right { grid-column: 2; grid-row: 1 / 3; }
+  /* PROTOTYPE (four-panel layout, ?variant=B|C) — throwaway */
+  .slot#slot-rb { display: none; grid-column: 2; grid-row: 2; }
+  .preview-frame.quad .slot#slot-right { grid-row: 1; }
+  .preview-frame.quad .slot#slot-rb { display: block; }
+  .preview-frame.quad-mat .slot#slot-right { border-bottom: 3px solid #000; }
+  .preview-frame.quad-mat .slot#slot-rb { margin-top: -3px; border-top: 3px solid #000; }
+  #btn-rb { display: none; }
+  body.quad #btn-rb { display: block; }
+  .proto-switcher { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 9999; display: flex; align-items: center; gap: 0.5rem; background: #fff; color: #000; padding: 0.4rem 0.6rem; border-radius: 999px; box-shadow: 0 4px 18px rgba(0,0,0,0.5); font: 600 13px system-ui, sans-serif; }
+  .proto-switcher button { border: 0; background: #000; color: #fff; width: 28px; height: 28px; border-radius: 50%; cursor: pointer; font-size: 14px; }
   .slot .slot-label { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #999; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; pointer-events: none; }
   .slot.has-image .slot-label { display: none; }
   .slot.active-target { outline: 2px solid #fff; outline-offset: -2px; z-index: 1; }
@@ -101,6 +111,8 @@
   .saved-mini .mini-grid .tl { grid-column: 1; grid-row: 1; }
   .saved-mini .mini-grid .bl { grid-column: 1; grid-row: 2; }
   .saved-mini .mini-grid .rt { grid-column: 2; grid-row: 1 / 3; }
+  .saved-mini .mini-grid.quad .rt { grid-row: 1; }  /* PROTOTYPE four-panel */
+  .saved-mini .mini-grid .rb { grid-column: 2; grid-row: 2; }
   .saved-mini .mini-label { font-size: 0.75rem; color: #a0a0a0; text-align: center; margin-top: 0.15rem; }
   .mini-x { position: absolute; top: -6px; right: -6px; width: 18px; height: 18px; background: #c44; color: #fff; border: none; border-radius: 50%; font-size: 0.75rem; cursor: pointer; display: none; line-height: 18px; text-align: center; padding: 0; }
   .saved-mini:hover .mini-x { display: block; }
@@ -246,6 +258,7 @@
         <div class="slot active-target" id="slot-tl" onclick="setActiveSlot('tl')"><span class="slot-label">Top Left</span></div>
         <div class="slot" id="slot-right" onclick="setActiveSlot('right')"><span class="slot-label">Right (portrait)</span></div>
         <div class="slot" id="slot-bl" onclick="setActiveSlot('bl')"><span class="slot-label">Bottom Left</span></div>
+        <div class="slot" id="slot-rb" onclick="setActiveSlot('rb')"><span class="slot-label">Guest 2</span></div>
       </div>
       <canvas id="tagOverlay"></canvas>
       <canvas id="formatCanvas"></canvas>
@@ -255,6 +268,7 @@
       <button class="slot-btn active" id="btn-tl" onclick="setActiveSlot('tl')">Top Left</button>
       <button class="slot-btn" id="btn-bl" onclick="setActiveSlot('bl')">Bottom Left</button>
       <button class="slot-btn" id="btn-right" onclick="setActiveSlot('right')">Right</button>
+      <button class="slot-btn" id="btn-rb" onclick="setActiveSlot('rb')">Guest 2</button>
     </div>
 
     <div class="panel" id="panelQuote" style="display:none">
@@ -500,8 +514,40 @@ let activeSlot = 'tl';
 const slotData = {
   tl:    { img: null, code: null, credit: null, url: null, panX: 0.5, panY: 0.5, zoom: 1.0, targetW: IMG_W, targetH: LEFT_H, sourceId: null },
   bl:    { img: null, code: null, credit: null, url: null, panX: 0.5, panY: 0.5, zoom: 1.0, targetW: IMG_W, targetH: LEFT_H, sourceId: null },
-  right: { img: null, code: null, credit: null, url: null, panX: 0.5, panY: 0.0, zoom: 1.0, targetW: IMG_W, targetH: RIGHT_H, sourceId: null }
+  right: { img: null, code: null, credit: null, url: null, panX: 0.5, panY: 0.0, zoom: 1.0, targetW: IMG_W, targetH: RIGHT_H, sourceId: null },
+  // PROTOTYPE: second guest, bottom-right square. Only used when ?variant=B or C.
+  rb:    { img: null, code: null, credit: null, url: null, panX: 0.5, panY: 0.0, zoom: 1.0, targetW: IMG_W, targetH: LEFT_H, sourceId: null }
 };
+
+// ══════════════════════════════════════════════════
+// PROTOTYPE — four-panel layout for two-guest episodes. THROWAWAY.
+// Question: does a 2×2 tile (art left, two guests right) hold up visually?
+// Variants via ?variant=:  A = current 3-panel  ·  B = 2×2, green gutter between guests
+//                          C = 2×2, guests share one black mat (reads as a pair)
+// Only the Tile/composition is wired up. Social, 16:9, quote cards, credits.md and Saved
+// Combinations still assume three panels — that's the grilling session, not this prototype.
+// ══════════════════════════════════════════════════
+const PROTO_VARIANTS = { A: 'Current 3-panel', B: '2×2, green gutter', C: '2×2, shared guest mat' };
+const PROTO_LOCAL = ['localhost', '127.0.0.1'].includes(location.hostname);  // never active on a deploy
+let PROTO_VARIANT = (k => PROTO_LOCAL && PROTO_VARIANTS[k] ? k : 'A')((new URLSearchParams(location.search).get('variant') || 'A').toUpperCase());
+const isQuad = () => PROTO_VARIANT !== 'A';
+const slotKeys = () => isQuad() ? ['tl', 'bl', 'right', 'rb'] : ['tl', 'bl', 'right'];
+// Right column split into two squares; in C the green gutter between them becomes black mat.
+const RB_Y = BL_Y;
+function tilePanels() {
+  if (!isQuad()) return [
+    { key: 'tl', x: TL_X, y: TL_Y, w: IMG_W, h: LEFT_H },
+    { key: 'bl', x: BL_X, y: BL_Y, w: IMG_W, h: LEFT_H },
+    { key: 'right', x: RT_X, y: RT_Y, w: IMG_W, h: RIGHT_H }
+  ];
+  return [
+    { key: 'tl', x: TL_X, y: TL_Y, w: IMG_W, h: LEFT_H },
+    { key: 'bl', x: BL_X, y: BL_Y, w: IMG_W, h: LEFT_H },
+    { key: 'right', x: RT_X, y: RT_Y, w: IMG_W, h: LEFT_H },
+    { key: 'rb', x: RT_X, y: RB_Y, w: IMG_W, h: LEFT_H }
+  ];
+}
+
 const savedCombos = [];
 const sourcePool = []; // { id, img, thumbUrl, fullUrl, code, credit, url, source, ready }
 let nextSourceId = 1;
@@ -784,7 +830,7 @@ function addUnsplashToPool(photo) {
 
 // Point any slot showing this source at its (now full-size) image.
 function upgradeSlots(entry) {
-  ['tl', 'bl', 'right'].forEach(k => {
+  slotKeys().forEach(k => {
     if (slotData[k].sourceId === entry.id) { slotData[k].img = entry.img; renderSlot(k); }
   });
   updateButtons();
@@ -1111,7 +1157,7 @@ function renderPool() {
 function removeFromPool(id) {
   const idx = sourcePool.findIndex(s => s.id === id);
   if (idx !== -1) sourcePool.splice(idx, 1);
-  ['tl', 'bl', 'right'].forEach(k => {
+  slotKeys().forEach(k => {
     if (slotData[k].sourceId === id) clearSlot(k);
   });
   renderPool();
@@ -1120,7 +1166,7 @@ function removeFromPool(id) {
 function clearSlot(k) {
   const sd = slotData[k];
   sd.img = null; sd.code = null; sd.credit = null; sd.url = null; sd.sourceId = null;
-  sd.panX = 0.5; sd.panY = (k === 'right') ? 0.0 : 0.5; sd.zoom = 1.0;
+  sd.panX = 0.5; sd.panY = (k === 'right' || k === 'rb') ? 0.0 : 0.5; sd.zoom = 1.0;
   const slotEl = document.getElementById('slot-' + k);
   slotEl.classList.remove('has-image');
   const cvs = slotEl.querySelector('canvas');
@@ -1161,7 +1207,7 @@ function placeFromPool(id) {
     sd.url = entry.url;
     sd.sourceId = entry.id;
     sd.panX = 0.5;
-    sd.panY = (slot === 'right') ? 0.0 : 0.5;
+    sd.panY = (slot === 'right' || slot === 'rb') ? 0.0 : 0.5;
     sd.zoom = 1.0;
     if (!isQuoteFormat(activeFormat)) syncZoomSlider(1);
     renderSlot(slot);
@@ -1170,7 +1216,7 @@ function placeFromPool(id) {
     // Auto-advance
     if (slot === 'tl' && !slotData.bl.img) setActiveSlot('bl');
     else if (slot === 'bl' && !slotData.right.img) setActiveSlot('right');
-    else if (slot === 'right' && !slotData.tl.img) setActiveSlot('tl');
+    else if (slot === 'right' && isQuad() && !slotData.rb.img) setActiveSlot('rb');
   }).catch(err => notice(err.message));
 }
 
@@ -1257,7 +1303,7 @@ function resetPosition() {
     return;
   }
   const sd = slotData[activeSlot];
-  sd.panX = 0.5; sd.panY = (activeSlot === 'right') ? 0.0 : 0.5; sd.zoom = 1.0;
+  sd.panX = 0.5; sd.panY = (activeSlot === 'right' || activeSlot === 'rb') ? 0.0 : 0.5; sd.zoom = 1.0;
   syncZoomSlider(1);
   renderSlot(activeSlot);
 }
@@ -1267,7 +1313,7 @@ function resetPosition() {
 // ══════════════════════════════════════════════════
 function updateCredits() {
   const lines = [];
-  [['tl', 'Top left'], ['bl', 'Bottom left'], ['right', 'Right']].forEach(([key, label]) => {
+  [['tl', 'Top left'], ['bl', 'Bottom left'], ['right', isQuad() ? 'Guest 1' : 'Right'], ...(isQuad() ? [['rb', 'Guest 2']] : [])].forEach(([key, label]) => {
     const s = slotData[key];
     if (!s.img) return;
     const poolEntry = sourcePool.find(p => p.id === s.sourceId);
@@ -1318,7 +1364,7 @@ function updateCredits() {
 
 // Refreshes every control that depends on what's filled in, then redraws the previews.
 function updateButtons() {
-  const allFilled = !!(slotData.tl.img && slotData.bl.img && slotData.right.img);
+  const allFilled = slotKeys().every(k => !!slotData[k].img);
   const ready = assetList().filter(assetReady).length;
   const allBtn = document.getElementById('exportAllBtn');
   allBtn.disabled = ready === 0;
@@ -1627,11 +1673,8 @@ function renderFormat(fmt, ctx, W, H, card) {
 function renderTile(ctx) {
   ctx.fillStyle = GREEN;
   ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
-  [
-    { key: 'tl', x: TL_X, y: TL_Y, w: IMG_W, h: LEFT_H },
-    { key: 'bl', x: BL_X, y: BL_Y, w: IMG_W, h: LEFT_H },
-    { key: 'right', x: RT_X, y: RT_Y, w: IMG_W, h: RIGHT_H }
-  ].forEach(p => {
+  if (PROTO_VARIANT === 'C') { ctx.fillStyle = BLACK; ctx.fillRect(RT_X, RT_Y, IMG_W + 2*PAD, RIGHT_H + 2*PAD); }
+  tilePanels().forEach(p => {
     const sd = slotData[p.key];
     ctx.fillStyle = BLACK;
     ctx.fillRect(p.x, p.y, p.w + 2*PAD, p.h + 2*PAD);
@@ -2532,8 +2575,8 @@ function renderSwatches() {
 // SAVED COMBOS
 // ══════════════════════════════════════════════════
 function saveCombo() {
-  const combo = {};
-  ['tl', 'bl', 'right'].forEach(k => {
+  const combo = { quad: isQuad() };
+  slotKeys().forEach(k => {
     const s = slotData[k];
     const poolEntry = sourcePool.find(p => p.id === s.sourceId);
     combo[k] = {
@@ -2543,7 +2586,7 @@ function saveCombo() {
       panX: s.panX, panY: s.panY, zoom: s.zoom
     };
   });
-  combo.label = slotData.tl.code + ' + ' + slotData.bl.code + ' + ' + slotData.right.code;
+  combo.label = slotKeys().map(k => slotData[k].code).join(' + ');
   savedCombos.push(combo);
   renderSaved();
 }
@@ -2556,8 +2599,8 @@ function renderSaved() {
     div.className = 'saved-mini';
     div.onclick = () => loadCombo(i);
     const grid = document.createElement('div');
-    grid.className = 'mini-grid';
-    [['tl', 'tl'], ['right', 'rt'], ['bl', 'bl']].forEach(([key, cls]) => {
+    grid.className = 'mini-grid' + (combo.quad ? ' quad' : '');
+    [['tl', 'tl'], ['right', 'rt'], ['bl', 'bl'], ...(combo.quad ? [['rb', 'rb']] : [])].forEach(([key, cls]) => {
       let el;
       if (combo[key].thumbUrl) {
         el = document.createElement('img');
@@ -2587,7 +2630,8 @@ function renderSaved() {
 
 function loadCombo(i) {
   const combo = savedCombos[i];
-  ['tl', 'bl', 'right'].forEach(k => {
+  slotKeys().forEach(k => {
+    if (!combo[k]) return;  // a 3-panel combo has no Guest 2
     const entry = sourcePool.find(p => p.id === combo[k].sourceId);
     if (!entry || !entry.img) return;
     const sd = slotData[k];
@@ -2624,7 +2668,7 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLightbo
 // RESIZE HANDLER
 // ══════════════════════════════════════════════════
 window.addEventListener('resize', () => {
-  ['tl', 'bl', 'right'].forEach(k => { if (slotData[k].img) renderSlot(k); });
+  slotKeys().forEach(k => { if (slotData[k].img) renderSlot(k); });
 });
 
 // ══════════════════════════════════════════════════
@@ -2637,6 +2681,42 @@ window.addEventListener('load', () => {
   setFormat('tile');
   ensureFonts().then(() => updateButtons());
 });
+
+// ── PROTOTYPE switcher (four-panel layout). THROWAWAY. ──
+function protoApply() {
+  const q = isQuad(), frame = document.getElementById('preview');
+  frame.classList.toggle('quad', q);
+  frame.classList.toggle('quad-mat', PROTO_VARIANT === 'C');
+  document.body.classList.toggle('quad', q);
+  slotData.right.targetH = q ? LEFT_H : RIGHT_H;
+  document.querySelector('#slot-right .slot-label').textContent = q ? 'Guest 1' : 'Right (portrait)';
+  document.getElementById('btn-right').textContent = q ? 'Guest 1' : 'Right';
+  if (!q && activeSlot === 'rb') setActiveSlot('right');
+  const bar = document.querySelector('.proto-switcher span');
+  if (bar) bar.textContent = 'PROTOTYPE \u00b7 ' + PROTO_VARIANT + ' (' + PROTO_VARIANTS[PROTO_VARIANT] + ')';
+  requestAnimationFrame(() => { slotKeys().forEach(k => renderSlot(k)); updateCredits(); updateButtons(); });
+}
+(function protoInit() {
+  if (!PROTO_LOCAL) return;
+  const keys = Object.keys(PROTO_VARIANTS);
+  const go = d => {
+    PROTO_VARIANT = keys[(keys.indexOf(PROTO_VARIANT) + d + keys.length) % keys.length];
+    const u = new URL(location.href); u.searchParams.set('variant', PROTO_VARIANT);
+    history.replaceState(null, '', u);  // no reload: loaded images survive the switch
+    protoApply();
+  };
+  const bar = document.createElement('div');
+  bar.className = 'proto-switcher';
+  bar.innerHTML = '<button aria-label="Previous variant">\u2190</button><span></span><button aria-label="Next variant">\u2192</button>';
+  const [prev, next] = bar.querySelectorAll('button');
+  prev.onclick = () => go(-1); next.onclick = () => go(1);
+  document.body.appendChild(bar);
+  document.addEventListener('keydown', e => {
+    if (e.target.closest('input, textarea, select, [contenteditable]')) return;
+    if (e.key === 'ArrowLeft') go(-1); else if (e.key === 'ArrowRight') go(1);
+  });
+  protoApply();
+})();
 </script>
 
 </body>
