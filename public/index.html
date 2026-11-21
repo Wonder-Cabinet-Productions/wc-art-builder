@@ -621,6 +621,20 @@ function ensureFonts() {
 const UNSPLASH_PROXY = '/api/unsplash';
 const UTM = '?utm_source=wonder_cabinet_art_builder&utm_medium=referral';
 
+// Adds the attribution UTM params to an unsplash.com link, keeping any query it already has.
+// Used for links built from user input (uploaded files), where the URL shape isn't guaranteed.
+function withUtm(link) {
+  try {
+    const u = new URL(link);
+    if (!/(^|\.)unsplash\.com$/.test(u.hostname)) return link;
+    u.searchParams.set('utm_source', 'wonder_cabinet_art_builder');
+    u.searchParams.set('utm_medium', 'referral');
+    return u.toString();
+  } catch {
+    return link;
+  }
+}
+
 // ══════════════════════════════════════════════════
 // TABS
 // ══════════════════════════════════════════════════
@@ -993,8 +1007,8 @@ function addUploadToPool(dataUrl, filename, photographer, url, sourceType, sourc
     code: 'L' + (sourcePool.filter(s => /^L\d/.test(s.code)).length + 1),
     credit: creditText,
     photographer: photographer,
-    photographerUrl: isUnsplash && url ? url.replace(/\/photos\/.*/, '/@' + photographer.toLowerCase().replace(/\s+/g, '')) : null,
-    url: url || '',
+    photographerUrl: isUnsplash && url ? withUtm(url.replace(/\/photos\/.*/, '/@' + photographer.toLowerCase().replace(/\s+/g, ''))) : null,
+    url: isUnsplash && url ? withUtm(url) : (url || ''),
     source: isUnsplash ? 'unsplash' : 'local',
     sourceType: sourceType,
     sourceLabel: effectiveLabel,
